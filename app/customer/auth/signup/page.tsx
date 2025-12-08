@@ -6,12 +6,12 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, UserPlus, User, Mail, Phone, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useAuth } from "@/lib/auth-context";
+import { useLegacyAuth } from "@/lib/auth-context";
 import { motion } from "framer-motion";
 
 export default function SignupPage() {
     const router = useRouter();
-    const { signup } = useAuth();
+    const { signup } = useLegacyAuth();
     const [formData, setFormData] = useState({
         username: "",
         email: "",

@@ -6,12 +6,12 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, LogIn, Mail, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useAuth } from "@/lib/auth-context";
+import { useLegacyAuth } from "@/lib/auth-context";
 import { motion } from "framer-motion";
 
 export default function LoginPage() {
     const router = useRouter();
-    const { login } = useAuth();
+    const { login } = useLegacyAuth();
     const [emailOrPhone, setEmailOrPhone] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
