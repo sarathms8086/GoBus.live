@@ -32,7 +32,7 @@ export default function LoginPage() {
         setIsLoading(false);
 
         if (success) {
-            router.push("/customer/profile");
+            router.push("/customer");
         } else {
             setError("Invalid email/phone or password");
         }

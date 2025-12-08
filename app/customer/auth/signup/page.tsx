@@ -80,7 +80,7 @@ export default function SignupPage() {
             );
 
             if (success) {
-                router.push("/customer/profile");
+                router.push("/customer");
             } else {
                 setErrors({ general: "User with this email or phone already exists" });
             }
