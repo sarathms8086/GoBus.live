@@ -16,40 +16,100 @@ export default function OwnerDashboard() {
     const [buses, setBuses] = useState<BusWithStops[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
+    const [error, setError] = useState<string | null>(null);
+
     useEffect(() => {
         const checkAuthAndLoadData = async () => {
-            // Get current session
-            const { data: { session } } = await supabase.auth.getSession();
-
-            if (!session?.user) {
-                router.push("/owner/auth/login");
-                return;
-            }
-
-            // Fetch owner profile
-            const { data: ownerData, error: ownerError } = await supabase
-                .from('owner_profiles')
-                .select('*')
-                .eq('id', session.user.id)
-                .single();
-
-            if (ownerError || !ownerData) {
-                // Not an owner, redirect to login
-                router.push("/owner/auth/login");
-                return;
-            }
-
-            setOwner(ownerData);
-
-            // Fetch owner's buses
             try {
-                const ownerBuses = await busApi.getByOwner(session.user.id);
-                setBuses(ownerBuses);
-            } catch (error) {
-                console.error('Error fetching buses:', error);
-            }
+                // Get current session
+                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-            setIsLoading(false);
+                if (sessionError) {
+                    console.error('Session error:', sessionError);
+                    setError('Failed to get session: ' + sessionError.message);
+                    setIsLoading(false);
+                    return;
+                }
+
+                if (!session?.user) {
+                    router.push("/owner/auth/login");
+                    return;
+                }
+
+                // Fetch owner profile
+                const { data: ownerData, error: ownerError } = await supabase
+                    .from('owner_profiles')
+                    .select('*')
+                    .eq('id', session.user.id)
+                    .single();
+
+                if (ownerError) {
+                    console.error('Owner profile error:', ownerError);
+
+                    // Check if table doesn't exist (migrations not run)
+                    if (ownerError.code === '42P01' || ownerError.message.includes('does not exist')) {
+                        setError('Database tables not found. Please run the migration SQL files in Supabase SQL Editor.');
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    // Profile exists but not as owner - might need to create owner_profile
+                    if (ownerError.code === 'PGRST116') {
+                        // Try to create owner_profile if profile exists with owner role
+                        const { data: profile } = await supabase
+                            .from('profiles')
+                            .select('role, display_name')
+                            .eq('id', session.user.id)
+                            .single();
+
+                        if (profile?.role === 'owner') {
+                            // Create missing owner_profile
+                            const { data: newOwner, error: createError } = await supabase
+                                .from('owner_profiles')
+                                .insert({
+                                    id: session.user.id,
+                                    company_name: profile.display_name || 'My Company',
+                                    email: session.user.email,
+                                })
+                                .select()
+                                .single();
+
+                            if (!createError && newOwner) {
+                                setOwner(newOwner);
+                            } else {
+                                setError('Failed to create owner profile. Check your database permissions.');
+                                setIsLoading(false);
+                                return;
+                            }
+                        } else {
+                            setError('No owner profile found. Please sign up as an owner first.');
+                            setIsLoading(false);
+                            return;
+                        }
+                    } else {
+                        setError('Failed to load owner profile: ' + ownerError.message);
+                        setIsLoading(false);
+                        return;
+                    }
+                } else {
+                    setOwner(ownerData);
+                }
+
+                // Fetch owner's buses
+                try {
+                    const ownerBuses = await busApi.getByOwner(session.user.id);
+                    setBuses(ownerBuses);
+                } catch (busError: any) {
+                    console.error('Error fetching buses:', busError);
+                    // Don't fail completely, just log the error
+                }
+
+                setIsLoading(false);
+            } catch (err: any) {
+                console.error('Dashboard error:', err);
+                setError('An unexpected error occurred: ' + err.message);
+                setIsLoading(false);
+            }
         };
 
         checkAuthAndLoadData();
@@ -70,6 +130,36 @@ export default function OwnerDashboard() {
         await supabase.auth.signOut();
         router.push("/");
     };
+
+    if (error) {
+        return (
+            <div className="min-h-screen bg-brand-cloud flex items-center justify-center p-6">
+                <div className="bg-white rounded-2xl p-8 shadow-lg max-w-md w-full text-center">
+                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <span className="text-3xl">⚠️</span>
+                    </div>
+                    <h2 className="text-xl font-bold text-brand-slate mb-2">Something went wrong</h2>
+                    <p className="text-brand-grey mb-6">{error}</p>
+                    <div className="space-y-3">
+                        <Button
+                            onClick={() => window.location.reload()}
+                            className="w-full bg-brand-green hover:bg-green-700"
+                        >
+                            Try Again
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={handleLogout}
+                            className="w-full"
+                        >
+                            <LogOut className="w-4 h-4 mr-2" />
+                            Logout
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     if (isLoading) {
         return (
