@@ -106,15 +106,32 @@ export const busApi = {
     /**
      * Add a stop to a bus
      */
-    async addStop(stop: Omit<BusStop, 'id'>): Promise<BusStop> {
-        const { data, error } = await supabase
+    async addStop(busId: string, stop: { name: string; arrival_time: string }): Promise<BusWithStops> {
+        // Get current max sequence
+        const { data: existingStops } = await supabase
             .from('bus_stops')
-            .insert(stop)
-            .select()
-            .single();
+            .select('sequence')
+            .eq('bus_id', busId)
+            .order('sequence', { ascending: false })
+            .limit(1);
+
+        const nextSequence = (existingStops && existingStops.length > 0)
+            ? existingStops[0].sequence + 1
+            : 1;
+
+        const { error } = await supabase
+            .from('bus_stops')
+            .insert({
+                bus_id: busId,
+                name: stop.name,
+                arrival_time: stop.arrival_time,
+                sequence: nextSequence,
+            });
 
         if (error) throw error;
-        return data as BusStop;
+
+        // Return updated bus with stops
+        return this.getById(busId) as Promise<BusWithStops>;
     },
 
     /**
@@ -156,15 +173,18 @@ export const busApi = {
     },
 
     /**
-     * Delete a specific stop
+     * Delete a specific stop and return updated bus
      */
-    async deleteStop(stopId: string): Promise<void> {
+    async deleteStop(busId: string, stopId: string): Promise<BusWithStops> {
         const { error } = await supabase
             .from('bus_stops')
             .delete()
             .eq('id', stopId);
 
         if (error) throw error;
+
+        // Return updated bus with stops
+        return this.getById(busId) as Promise<BusWithStops>;
     },
 
     /**
