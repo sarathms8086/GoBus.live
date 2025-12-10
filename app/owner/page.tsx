@@ -6,31 +6,68 @@ import { useRouter } from "next/navigation";
 import { Plus, BusFront, MapPin, Clock, Users, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCurrentOwner, logoutOwner } from "@/lib/owner-storage";
-import { getBusesByOwner, Bus } from "@/lib/bus-storage";
+import { supabase, OwnerProfile, BusWithStops } from "@/lib/supabase";
+import { busApi } from "@/lib/api/buses";
 import { motion } from "framer-motion";
 
 export default function OwnerDashboard() {
     const router = useRouter();
-    const [owner, setOwner] = useState<any>(null);
-    const [buses, setBuses] = useState<Bus[]>([]);
+    const [owner, setOwner] = useState<OwnerProfile | null>(null);
+    const [buses, setBuses] = useState<BusWithStops[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const currentOwner = getCurrentOwner();
-        if (!currentOwner) {
-            router.push("/owner/auth/login");
-            return;
-        }
+        const checkAuthAndLoadData = async () => {
+            // Get current session
+            const { data: { session } } = await supabase.auth.getSession();
 
-        setOwner(currentOwner);
-        const ownerBuses = getBusesByOwner(currentOwner.id);
-        setBuses(ownerBuses);
-        setIsLoading(false);
+            if (!session?.user) {
+                router.push("/owner/auth/login");
+                return;
+            }
+
+            // Fetch owner profile
+            const { data: ownerData, error: ownerError } = await supabase
+                .from('owner_profiles')
+                .select('*')
+                .eq('id', session.user.id)
+                .single();
+
+            if (ownerError || !ownerData) {
+                // Not an owner, redirect to login
+                router.push("/owner/auth/login");
+                return;
+            }
+
+            setOwner(ownerData);
+
+            // Fetch owner's buses
+            try {
+                const ownerBuses = await busApi.getByOwner(session.user.id);
+                setBuses(ownerBuses);
+            } catch (error) {
+                console.error('Error fetching buses:', error);
+            }
+
+            setIsLoading(false);
+        };
+
+        checkAuthAndLoadData();
+
+        // Listen for auth changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+            async (event, session) => {
+                if (event === 'SIGNED_OUT') {
+                    router.push("/owner/auth/login");
+                }
+            }
+        );
+
+        return () => subscription.unsubscribe();
     }, [router]);
 
-    const handleLogout = () => {
-        logoutOwner();
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
         router.push("/");
     };
 
@@ -48,7 +85,7 @@ export default function OwnerDashboard() {
             <header className="bg-white shadow-sm p-6">
                 <div className="flex justify-between items-center">
                     <div>
-                        <h1 className="text-2xl font-bold text-brand-slate">{owner?.companyName}</h1>
+                        <h1 className="text-2xl font-bold text-brand-slate">{owner?.company_name}</h1>
                         <p className="text-sm text-brand-grey mt-1">Fleet Management</p>
                     </div>
                     <Button variant="ghost" size="icon" onClick={handleLogout}>
@@ -140,20 +177,20 @@ export default function OwnerDashboard() {
                                                             <BusFront className="w-6 h-6 text-brand-green" />
                                                         </div>
                                                         <div>
-                                                            <h3 className="font-bold text-brand-slate">{bus.registrationNumber}</h3>
-                                                            <p className="text-xs text-brand-grey">Ref: {bus.refNumber}</p>
+                                                            <h3 className="font-bold text-brand-slate">{bus.registration_number}</h3>
+                                                            <p className="text-xs text-brand-grey">Ref: {bus.ref_number}</p>
                                                         </div>
                                                     </div>
                                                 </div>
 
                                                 <div className="flex items-center text-sm text-brand-grey mb-2">
                                                     <MapPin className="w-4 h-4 mr-1" />
-                                                    <span>{bus.routeFrom} → {bus.routeTo}</span>
+                                                    <span>{bus.route_from} → {bus.route_to}</span>
                                                 </div>
 
                                                 <div className="flex items-center text-sm text-brand-grey">
                                                     <Clock className="w-4 h-4 mr-1" />
-                                                    <span>{bus.stops.length} stops</span>
+                                                    <span>{bus.stops?.length || 0} stops</span>
                                                 </div>
                                             </CardContent>
                                         </Card>

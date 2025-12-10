@@ -7,11 +7,11 @@ import { ArrowLeft, LogIn, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
-import { authenticateOwner, setCurrentOwner } from "@/lib/owner-storage";
+import { supabase } from "@/lib/supabase";
 
 export default function OwnerLoginPage() {
     const router = useRouter();
-    const [emailOrPhone, setEmailOrPhone] = useState("");
+    const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -21,20 +21,46 @@ export default function OwnerLoginPage() {
         setError("");
         setIsLoading(true);
 
-        if (!emailOrPhone || !password) {
+        if (!email || !password) {
             setError("Please fill in all fields");
             setIsLoading(false);
             return;
         }
 
-        const owner = authenticateOwner(emailOrPhone, password);
-        setIsLoading(false);
+        try {
+            // Sign in with Supabase Auth
+            const { data, error: authError } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
 
-        if (owner) {
-            setCurrentOwner(owner.id);
-            router.push("/owner");
-        } else {
-            setError("Invalid email/phone or password");
+            if (authError) {
+                setError(authError.message);
+                setIsLoading(false);
+                return;
+            }
+
+            if (data.user) {
+                // Verify user is an owner
+                const { data: profileData, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', data.user.id)
+                    .single();
+
+                if (profileError || profileData?.role !== 'owner') {
+                    await supabase.auth.signOut();
+                    setError("This login is for fleet owners only");
+                    setIsLoading(false);
+                    return;
+                }
+
+                router.push("/owner");
+            }
+        } catch (err) {
+            setError("An error occurred. Please try again.");
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -68,12 +94,12 @@ export default function OwnerLoginPage() {
 
                         <form onSubmit={handleSubmit} className="space-y-6">
                             <Input
-                                label="Email or Phone"
-                                type="text"
-                                placeholder="Enter your email or phone"
-                                value={emailOrPhone}
-                                onChange={(e) => setEmailOrPhone(e.target.value)}
-                                error={error && !emailOrPhone ? "This field is required" : ""}
+                                label="Email"
+                                type="email"
+                                placeholder="Enter your email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                error={error && !email ? "This field is required" : ""}
                             />
 
                             <Input

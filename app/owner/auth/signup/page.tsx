@@ -7,7 +7,7 @@ import { ArrowLeft, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
-import { createOwner, setCurrentOwner } from "@/lib/owner-storage";
+import { supabase } from "@/lib/supabase";
 
 export default function OwnerSignupPage() {
     const router = useRouter();
@@ -66,17 +66,30 @@ export default function OwnerSignupPage() {
         setIsLoading(true);
 
         try {
-            const owner = createOwner(
-                formData.companyName,
-                formData.email,
-                formData.phone,
-                formData.password
-            );
+            // Sign up with Supabase Auth
+            const { data, error } = await supabase.auth.signUp({
+                email: formData.email,
+                password: formData.password,
+                options: {
+                    data: {
+                        role: 'owner',
+                        display_name: formData.companyName,
+                        company_name: formData.companyName,
+                        phone: formData.phone,
+                    },
+                },
+            });
 
-            setCurrentOwner(owner.id);
-            router.push("/owner");
+            if (error) {
+                setErrors({ general: error.message });
+                return;
+            }
+
+            if (data.user) {
+                router.push("/owner");
+            }
         } catch (error) {
-            setErrors({ general: "Company with this email or phone already exists" });
+            setErrors({ general: "An error occurred. Please try again." });
         } finally {
             setIsLoading(false);
         }
