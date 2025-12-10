@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, BusFront } from "lucide-react";
@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion } from "framer-motion";
-import { getCurrentOwner } from "@/lib/owner-storage";
-import { createBus } from "@/lib/bus-storage";
+import { supabase } from "@/lib/supabase";
+import { busApi } from "@/lib/api/buses";
 
 export default function AddBusPage() {
     const router = useRouter();
+    const [ownerId, setOwnerId] = useState<string | null>(null);
     const [formData, setFormData] = useState({
         registrationNumber: "",
         routeFrom: "",
@@ -20,6 +21,35 @@ export default function AddBusPage() {
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [isLoading, setIsLoading] = useState(false);
+    const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+    useEffect(() => {
+        const checkAuth = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+
+            if (!session?.user) {
+                router.push("/owner/auth/login");
+                return;
+            }
+
+            // Verify user is an owner
+            const { data: ownerData, error } = await supabase
+                .from('owner_profiles')
+                .select('id')
+                .eq('id', session.user.id)
+                .single();
+
+            if (error || !ownerData) {
+                router.push("/owner/auth/login");
+                return;
+            }
+
+            setOwnerId(session.user.id);
+            setIsAuthLoading(false);
+        };
+
+        checkAuth();
+    }, [router]);
 
     const validateForm = () => {
         const newErrors: Record<string, string> = {};
@@ -45,29 +75,30 @@ export default function AddBusPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!validateForm()) {
-            return;
-        }
-
-        const owner = getCurrentOwner();
-        if (!owner) {
-            router.push("/owner/auth/login");
+        if (!validateForm() || !ownerId) {
             return;
         }
 
         setIsLoading(true);
+        setErrors({});
 
         try {
-            const bus = createBus(
-                owner.id,
-                formData.registrationNumber,
-                formData.routeFrom,
-                formData.routeTo
-            );
+            const bus = await busApi.create({
+                owner_id: ownerId,
+                registration_number: formData.registrationNumber,
+                route_from: formData.routeFrom,
+                route_to: formData.routeTo,
+            });
 
             router.push(`/owner/buses/${bus.id}`);
         } catch (error: any) {
-            setErrors({ general: error.message });
+            console.error('Error creating bus:', error);
+
+            if (error.message.includes('duplicate') || error.code === '23505') {
+                setErrors({ general: "A bus with this registration number already exists." });
+            } else {
+                setErrors({ general: error.message || "Failed to create bus. Please try again." });
+            }
         } finally {
             setIsLoading(false);
         }
@@ -79,6 +110,14 @@ export default function AddBusPage() {
             setErrors({ ...errors, [field]: "" });
         }
     };
+
+    if (isAuthLoading) {
+        return (
+            <div className="min-h-screen bg-brand-cloud flex items-center justify-center">
+                <p className="text-brand-grey">Loading...</p>
+            </div>
+        );
+    }
 
     return (
         <main className="min-h-screen bg-brand-cloud flex flex-col">
