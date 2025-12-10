@@ -64,6 +64,7 @@ export default function OwnerSignupPage() {
         }
 
         setIsLoading(true);
+        setErrors({});
 
         try {
             // Sign up with Supabase Auth
@@ -81,14 +82,33 @@ export default function OwnerSignupPage() {
             });
 
             if (error) {
+                console.error('Signup error:', error);
                 setErrors({ general: error.message });
+                setIsLoading(false);
                 return;
             }
 
             if (data.user) {
+                // Check if email confirmation is required
+                if (data.user.identities && data.user.identities.length === 0) {
+                    setErrors({ general: "A user with this email already exists." });
+                    setIsLoading(false);
+                    return;
+                }
+
+                // Check if email needs verification
+                if (data.session === null) {
+                    setErrors({
+                        success: "Account created! Please check your email to verify your account before logging in."
+                    });
+                    setIsLoading(false);
+                    return;
+                }
+
                 router.push("/owner");
             }
         } catch (error) {
+            console.error('Signup exception:', error);
             setErrors({ general: "An error occurred. Please try again." });
         } finally {
             setIsLoading(false);
@@ -175,6 +195,12 @@ export default function OwnerSignupPage() {
                                 onChange={(e) => handleChange("confirmPassword", e.target.value)}
                                 error={errors.confirmPassword}
                             />
+
+                            {errors.success && (
+                                <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+                                    <p className="text-sm text-green-600 text-center">{errors.success}</p>
+                                </div>
+                            )}
 
                             {errors.general && (
                                 <div className="bg-red-50 border border-red-200 rounded-xl p-3">
