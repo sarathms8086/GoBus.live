@@ -31,6 +31,77 @@ interface TripConfig {
     stops: { name: string; arrivalTime: string }[];
 }
 
+// Helper component for 12-hour time input
+const CustomTimeInput = ({ value, onChange }: { value: string, onChange: (val: string) => void }) => {
+    // Parse initial value (HH:MM 24h format)
+    const [hour, setHour] = useState("12");
+    const [minute, setMinute] = useState("00");
+    const [ampm, setAmpm] = useState("AM");
+
+    useEffect(() => {
+        if (value) {
+            const [h, m] = value.split(':');
+            let hNum = parseInt(h);
+            const period = hNum >= 12 ? 'PM' : 'AM';
+            if (hNum > 12) hNum -= 12;
+            if (hNum === 0) hNum = 12;
+
+            setHour(hNum.toString().padStart(2, '0'));
+            setMinute(m);
+            setAmpm(period);
+        }
+    }, [value]);
+
+    const updateTime = (newHour: string, newMinute: string, newAmpm: string) => {
+        let h = parseInt(newHour);
+        if (newAmpm === 'PM' && h !== 12) h += 12;
+        if (newAmpm === 'AM' && h === 12) h = 0;
+        const timeStr = `${h.toString().padStart(2, '0')}:${newMinute}`;
+        onChange(timeStr);
+
+        // Update local state immediately for UI responsiveness
+        setHour(newHour);
+        setMinute(newMinute);
+        setAmpm(newAmpm);
+    };
+
+    return (
+        <div className="flex items-center gap-1">
+            <select
+                value={hour}
+                onChange={(e) => updateTime(e.target.value, minute, ampm)}
+                className="bg-white border border-gray-200 rounded px-1 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green w-14"
+            >
+                {Array.from({ length: 12 }, (_, i) => i + 1).map(h => (
+                    <option key={h} value={h.toString().padStart(2, '0')}>
+                        {h.toString().padStart(2, '0')}
+                    </option>
+                ))}
+            </select>
+            <span className="text-gray-400 font-bold">:</span>
+            <select
+                value={minute}
+                onChange={(e) => updateTime(hour, e.target.value, ampm)}
+                className="bg-white border border-gray-200 rounded px-1 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green w-14"
+            >
+                {Array.from({ length: 60 }, (_, i) => i).map(m => (
+                    <option key={m} value={m.toString().padStart(2, '0')}>
+                        {m.toString().padStart(2, '0')}
+                    </option>
+                ))}
+            </select>
+            <select
+                value={ampm}
+                onChange={(e) => updateTime(hour, minute, e.target.value)}
+                className="bg-white border border-gray-200 rounded px-1 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green font-medium w-16"
+            >
+                <option value="AM">AM</option>
+                <option value="PM">PM</option>
+            </select>
+        </div>
+    );
+};
+
 export default function BusSetupPage({ params }: { params: Promise<{ busId: string }> }) {
     const resolvedParams = use(params);
     const router = useRouter();
@@ -76,13 +147,13 @@ export default function BusSetupPage({ params }: { params: Promise<{ busId: stri
         for (let i = 0; i < numberOfTrips; i++) {
             configs.push({
                 tripNumber: i + 1,
-                startTime: "",
+                startTime: "09:00", // Default 9 AM
                 daysOfWeek: [...ALL_DAYS],
                 numberOfStops: 3,
                 stops: [
-                    { name: "", arrivalTime: "" },
-                    { name: "", arrivalTime: "" },
-                    { name: "", arrivalTime: "" },
+                    { name: "", arrivalTime: "09:15" },
+                    { name: "", arrivalTime: "09:30" },
+                    { name: "", arrivalTime: "09:45" },
                 ],
             });
         }
@@ -113,7 +184,7 @@ export default function BusSetupPage({ params }: { params: Promise<{ busId: stri
         // Create stops array with specified count
         const stops = [];
         for (let i = 0; i < count; i++) {
-            stops.push(trip.stops[i] || { name: "", arrivalTime: "" });
+            stops.push(trip.stops[i] || { name: "", arrivalTime: "09:00" });
         }
 
         updated[currentTripIndex] = { ...trip, numberOfStops: count, stops };
@@ -333,12 +404,13 @@ export default function BusSetupPage({ params }: { params: Promise<{ busId: stri
                                 </h2>
 
                                 {/* Start Time */}
-                                <Input
-                                    label="Trip Start Time"
-                                    type="time"
-                                    value={tripConfigs[currentTripIndex].startTime}
-                                    onChange={(e) => updateTripConfig('startTime', e.target.value)}
-                                />
+                                <div>
+                                    <label className="block text-sm font-medium text-brand-slate mb-2">Trip Start Time</label>
+                                    <CustomTimeInput
+                                        value={tripConfigs[currentTripIndex].startTime}
+                                        onChange={(val) => updateTripConfig('startTime', val)}
+                                    />
+                                </div>
 
                                 {/* Days of Service */}
                                 <div>
@@ -352,8 +424,8 @@ export default function BusSetupPage({ params }: { params: Promise<{ busId: stri
                                                 type="button"
                                                 onClick={() => toggleDay(day)}
                                                 className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${tripConfigs[currentTripIndex].daysOfWeek.includes(day)
-                                                        ? 'bg-brand-green text-white'
-                                                        : 'bg-gray-100 text-brand-grey hover:bg-gray-200'
+                                                    ? 'bg-brand-green text-white'
+                                                    : 'bg-gray-100 text-brand-grey hover:bg-gray-200'
                                                     }`}
                                             >
                                                 {DAY_LABELS[day]}
@@ -397,7 +469,7 @@ export default function BusSetupPage({ params }: { params: Promise<{ busId: stri
                                 <h3 className="text-lg font-bold text-brand-slate mb-4">Enter Stop Details</h3>
 
                                 {/* Table Header */}
-                                <div className="grid grid-cols-12 gap-2 mb-2 px-2">
+                                <div className="grid grid-cols-12 gap-2 mb-2 px-2 hidden sm:grid">
                                     <div className="col-span-2 text-xs font-bold text-brand-slate uppercase">
                                         Stop #
                                     </div>
@@ -410,15 +482,16 @@ export default function BusSetupPage({ params }: { params: Promise<{ busId: stri
                                 </div>
 
                                 {/* Table Rows */}
-                                <div className="space-y-2">
+                                <div className="space-y-4">
                                     {tripConfigs[currentTripIndex].stops.map((stop, index) => (
-                                        <div key={index} className="grid grid-cols-12 gap-2 items-center">
-                                            <div className="col-span-2">
-                                                <div className="w-8 h-8 bg-brand-green rounded-full flex items-center justify-center">
-                                                    <span className="text-white text-sm font-bold">{index + 1}</span>
+                                        <div key={index} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-gray-50 p-2 rounded-lg sm:bg-transparent sm:p-0">
+                                            <div className="sm:col-span-2 flex items-center mb-2 sm:mb-0">
+                                                <div className="w-6 h-6 bg-brand-green/20 text-brand-green rounded-full flex items-center justify-center text-xs font-bold mr-2 sm:mr-0">
+                                                    {index + 1}
                                                 </div>
+                                                <span className="sm:hidden text-sm font-bold text-brand-slate">Stop #{index + 1}</span>
                                             </div>
-                                            <div className="col-span-6">
+                                            <div className="sm:col-span-6 mb-2 sm:mb-0">
                                                 <input
                                                     type="text"
                                                     placeholder="Enter stop name"
@@ -427,12 +500,10 @@ export default function BusSetupPage({ params }: { params: Promise<{ busId: stri
                                                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
                                                 />
                                             </div>
-                                            <div className="col-span-4">
-                                                <input
-                                                    type="time"
+                                            <div className="sm:col-span-4">
+                                                <CustomTimeInput
                                                     value={stop.arrivalTime}
-                                                    onChange={(e) => updateStop(index, 'arrivalTime', e.target.value)}
-                                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
+                                                    onChange={(val) => updateStop(index, 'arrivalTime', val)}
                                                 />
                                             </div>
                                         </div>

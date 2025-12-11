@@ -21,6 +21,77 @@ const DAY_LABELS: Record<DayOfWeek, string> = {
     sun: 'Sun',
 };
 
+// Helper component for 12-hour time input
+const CustomTimeInput = ({ value, onChange }: { value: string, onChange: (val: string) => void }) => {
+    // Parse initial value (HH:MM 24h format)
+    const [hour, setHour] = useState("12");
+    const [minute, setMinute] = useState("00");
+    const [ampm, setAmpm] = useState("AM");
+
+    useEffect(() => {
+        if (value) {
+            const [h, m] = value.split(':');
+            let hNum = parseInt(h);
+            const period = hNum >= 12 ? 'PM' : 'AM';
+            if (hNum > 12) hNum -= 12;
+            if (hNum === 0) hNum = 12;
+
+            setHour(hNum.toString().padStart(2, '0'));
+            setMinute(m);
+            setAmpm(period);
+        }
+    }, [value]);
+
+    const updateTime = (newHour: string, newMinute: string, newAmpm: string) => {
+        let h = parseInt(newHour);
+        if (newAmpm === 'PM' && h !== 12) h += 12;
+        if (newAmpm === 'AM' && h === 12) h = 0;
+        const timeStr = `${h.toString().padStart(2, '0')}:${newMinute}`;
+        onChange(timeStr);
+
+        // Update local state immediately for UI responsiveness
+        setHour(newHour);
+        setMinute(newMinute);
+        setAmpm(newAmpm);
+    };
+
+    return (
+        <div className="flex items-center gap-1">
+            <select
+                value={hour}
+                onChange={(e) => updateTime(e.target.value, minute, ampm)}
+                className="bg-white border border-gray-200 rounded px-1 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
+            >
+                {Array.from({ length: 12 }, (_, i) => i + 1).map(h => (
+                    <option key={h} value={h.toString().padStart(2, '0')}>
+                        {h.toString().padStart(2, '0')}
+                    </option>
+                ))}
+            </select>
+            <span className="text-gray-400">:</span>
+            <select
+                value={minute}
+                onChange={(e) => updateTime(hour, e.target.value, ampm)}
+                className="bg-white border border-gray-200 rounded px-1 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
+            >
+                {Array.from({ length: 60 }, (_, i) => i).map(m => (
+                    <option key={m} value={m.toString().padStart(2, '0')}>
+                        {m.toString().padStart(2, '0')}
+                    </option>
+                ))}
+            </select>
+            <select
+                value={ampm}
+                onChange={(e) => updateTime(hour, minute, e.target.value)}
+                className="bg-white border border-gray-200 rounded px-1 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green font-medium"
+            >
+                <option value="AM">AM</option>
+                <option value="PM">PM</option>
+            </select>
+        </div>
+    );
+};
+
 export default function TripDetailsPage({
     params
 }: {
@@ -89,7 +160,8 @@ export default function TripDetailsPage({
 
     const handleGenerateTable = () => {
         const count = Math.max(1, Math.min(20, stopCountToGenerate));
-        setNewStops(Array(count).fill(null).map(() => ({ name: "", arrivalTime: "" })));
+        // Default time 9:00 AM
+        setNewStops(Array(count).fill(null).map(() => ({ name: "", arrivalTime: "09:00" })));
         setIsBulkMode(true);
         setError("");
     };
@@ -115,8 +187,7 @@ export default function TripDetailsPage({
         setError("");
 
         try {
-            // Add stops sequentially to preserve order (or we could update API to accept bulk)
-            // For now, sequential add is fine
+            // Add stops sequentially to preserve order
             for (const stop of newStops) {
                 await tripApi.addStop(trip.id, {
                     name: stop.name,
@@ -247,8 +318,8 @@ export default function TripDetailsPage({
                                     {/* Table Header */}
                                     <div className="grid grid-cols-12 gap-2 mb-2 px-2 hidden sm:grid">
                                         <div className="col-span-1 text-xs font-bold text-brand-slate uppercase">#</div>
-                                        <div className="col-span-7 text-xs font-bold text-brand-slate uppercase">Stop Name</div>
-                                        <div className="col-span-4 text-xs font-bold text-brand-slate uppercase">Time</div>
+                                        <div className="col-span-6 text-xs font-bold text-brand-slate uppercase">Stop Name</div>
+                                        <div className="col-span-5 text-xs font-bold text-brand-slate uppercase">Time</div>
                                     </div>
 
                                     {/* Table Rows */}
@@ -260,18 +331,17 @@ export default function TripDetailsPage({
                                                 </div>
                                                 <span className="sm:hidden text-sm font-bold text-brand-slate">Stop #{index + 1}</span>
                                             </div>
-                                            <div className="sm:col-span-7 mb-2 sm:mb-0">
+                                            <div className="sm:col-span-6 mb-2 sm:mb-0">
                                                 <Input
                                                     placeholder="Enter stop name"
                                                     value={stop.name}
                                                     onChange={(e) => updateNewStop(index, 'name', e.target.value)}
                                                 />
                                             </div>
-                                            <div className="sm:col-span-4">
-                                                <Input
-                                                    type="time"
+                                            <div className="sm:col-span-5">
+                                                <CustomTimeInput
                                                     value={stop.arrivalTime}
-                                                    onChange={(e) => updateNewStop(index, 'arrivalTime', e.target.value)}
+                                                    onChange={(val) => updateNewStop(index, 'arrivalTime', val)}
                                                 />
                                             </div>
                                         </div>
