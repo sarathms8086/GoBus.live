@@ -90,7 +90,7 @@ export default function AddBusPage() {
                 route_to: formData.routeTo,
             });
 
-            router.push(`/owner/buses/${bus.id}`);
+            router.push(`/owner/buses/${bus.id}/setup`);
         } catch (error: any) {
             console.error('Error creating bus:', error);
 
@@ -188,7 +188,7 @@ export default function AddBusPage() {
                                     className="w-full py-6 text-lg bg-brand-green hover:bg-green-700"
                                     disabled={isLoading}
                                 >
-                                    {isLoading ? "Adding Bus..." : "Add Bus & Configure Stops"}
+                                    {isLoading ? "Adding Bus..." : "Continue to Trip Setup"}
                                 </Button>
                             </form>
                         </CardContent>
