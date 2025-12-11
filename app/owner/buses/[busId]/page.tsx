@@ -121,6 +121,10 @@ export default function BusDetailsPage({ params }: { params: Promise<{ busId: st
     const handleDeleteTrip = async (tripId: string) => {
         if (!bus) return;
 
+        if (!confirm('Are you sure you want to delete this trip?')) {
+            return;
+        }
+
         try {
             await tripApi.delete(tripId);
             const updatedTrips = await tripApi.getByBus(bus.id);
@@ -216,8 +220,8 @@ export default function BusDetailsPage({ params }: { params: Promise<{ busId: st
                                                 type="button"
                                                 onClick={() => toggleDay(day)}
                                                 className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${newTripDays.includes(day)
-                                                        ? 'bg-brand-green text-white'
-                                                        : 'bg-gray-100 text-brand-grey hover:bg-gray-200'
+                                                    ? 'bg-brand-green text-white'
+                                                    : 'bg-gray-100 text-brand-grey hover:bg-gray-200'
                                                     }`}
                                             >
                                                 {DAY_LABELS[day]}

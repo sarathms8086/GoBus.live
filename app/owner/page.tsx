@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, BusFront, MapPin, Clock, Users, LogOut } from "lucide-react";
+import { Plus, BusFront, MapPin, Clock, Users, LogOut, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase, OwnerProfile, BusWithStops } from "@/lib/supabase";
@@ -129,6 +129,16 @@ export default function OwnerDashboard() {
     const handleLogout = async () => {
         await supabase.auth.signOut();
         router.push("/");
+    };
+
+    const handleDeleteBus = async (busId: string) => {
+        try {
+            await busApi.delete(busId);
+            setBuses(buses.filter(b => b.id !== busId));
+        } catch (err: any) {
+            console.error('Error deleting bus:', err);
+            alert('Failed to delete bus: ' + err.message);
+        }
     };
 
     if (error) {
@@ -259,8 +269,24 @@ export default function OwnerDashboard() {
                                     transition={{ delay: index * 0.1 }}
                                 >
                                     <Link href={`/owner/buses/${bus.id}`}>
-                                        <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                                        <Card className="hover:shadow-md transition-shadow cursor-pointer group relative">
                                             <CardContent className="p-4">
+                                                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            if (confirm('Are you sure you want to delete this bus? This action cannot be undone.')) {
+                                                                handleDeleteBus(bus.id);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
                                                 <div className="flex items-start justify-between mb-3">
                                                     <div className="flex items-center">
                                                         <div className="w-12 h-12 bg-brand-green/10 rounded-xl flex items-center justify-center mr-3">
