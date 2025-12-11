@@ -3,7 +3,7 @@
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, MapPin, Clock, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, MapPin, Clock, Trash2, Check, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,11 +30,14 @@ export default function TripDetailsPage({
     const router = useRouter();
     const [bus, setBus] = useState<Bus | null>(null);
     const [trip, setTrip] = useState<TripWithStops | null>(null);
-    const [stopName, setStopName] = useState("");
-    const [arrivalTime, setArrivalTime] = useState("");
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(true);
-    const [isAddingStop, setIsAddingStop] = useState(false);
+
+    // Bulk Add State
+    const [isBulkMode, setIsBulkMode] = useState(false);
+    const [stopCountToGenerate, setStopCountToGenerate] = useState(1);
+    const [newStops, setNewStops] = useState<{ name: string; arrivalTime: string }[]>([]);
+    const [isSavingStops, setIsSavingStops] = useState(false);
 
     useEffect(() => {
         const loadData = async () => {
@@ -84,36 +87,63 @@ export default function TripDetailsPage({
         loadData();
     }, [resolvedParams.busId, resolvedParams.tripId, router]);
 
-    const handleAddStop = async () => {
-        if (!stopName || !arrivalTime) {
-            setError("Please fill in all fields");
-            return;
-        }
+    const handleGenerateTable = () => {
+        const count = Math.max(1, Math.min(20, stopCountToGenerate));
+        setNewStops(Array(count).fill(null).map(() => ({ name: "", arrivalTime: "" })));
+        setIsBulkMode(true);
+        setError("");
+    };
 
+    const updateNewStop = (index: number, field: 'name' | 'arrivalTime', value: string) => {
+        const updated = [...newStops];
+        updated[index] = { ...updated[index], [field]: value };
+        setNewStops(updated);
+    };
+
+    const handleSaveStops = async () => {
         if (!trip) return;
 
-        setIsAddingStop(true);
+        // Validate
+        for (let i = 0; i < newStops.length; i++) {
+            if (!newStops[i].name || !newStops[i].arrivalTime) {
+                setError(`Please fill in all details for Stop #${i + 1}`);
+                return;
+            }
+        }
+
+        setIsSavingStops(true);
         setError("");
 
         try {
-            const updatedTrip = await tripApi.addStop(trip.id, {
-                name: stopName,
-                arrival_time: arrivalTime,
-            });
+            // Add stops sequentially to preserve order (or we could update API to accept bulk)
+            // For now, sequential add is fine
+            for (const stop of newStops) {
+                await tripApi.addStop(trip.id, {
+                    name: stop.name,
+                    arrival_time: stop.arrivalTime,
+                });
+            }
 
-            setTrip(updatedTrip);
-            setStopName("");
-            setArrivalTime("");
+            // Refresh trip data
+            const updatedTrip = await tripApi.getById(trip.id);
+            if (updatedTrip) setTrip(updatedTrip);
+
+            // Reset form
+            setIsBulkMode(false);
+            setStopCountToGenerate(1);
+            setNewStops([]);
         } catch (err: any) {
-            console.error('Error adding stop:', err);
-            setError(err.message || "Failed to add stop");
+            console.error('Error adding stops:', err);
+            setError(err.message || "Failed to add stops");
         } finally {
-            setIsAddingStop(false);
+            setIsSavingStops(false);
         }
     };
 
     const handleDeleteStop = async (stopId: string) => {
         if (!trip) return;
+
+        if (!confirm('Are you sure you want to delete this stop?')) return;
 
         try {
             const updatedTrip = await tripApi.deleteStop(trip.id, stopId);
@@ -181,50 +211,111 @@ export default function TripDetailsPage({
                     </CardContent>
                 </Card>
 
-                {/* Add Stop Form */}
+                {/* Add Stops Section */}
                 <Card>
                     <CardContent className="p-6">
-                        <h2 className="text-lg font-bold text-brand-slate mb-4">Add Stop</h2>
-                        <div className="space-y-4">
-                            <Input
-                                label="Stop Name"
-                                type="text"
-                                placeholder="e.g., Silk Board Junction"
-                                value={stopName}
-                                onChange={(e) => setStopName(e.target.value)}
-                            />
-                            <Input
-                                label="Arrival Time"
-                                type="time"
-                                value={arrivalTime}
-                                onChange={(e) => setArrivalTime(e.target.value)}
-                            />
-                            {error && (
-                                <p className="text-sm text-red-500">{error}</p>
-                            )}
-                            <Button
-                                onClick={handleAddStop}
-                                className="w-full bg-brand-green hover:bg-green-700"
-                                disabled={isAddingStop}
+                        <h2 className="text-lg font-bold text-brand-slate mb-4">Add Stops</h2>
+
+                        {!isBulkMode ? (
+                            <div className="flex items-end gap-4">
+                                <div className="flex-1">
+                                    <label className="block text-sm font-medium text-brand-slate mb-2">
+                                        How many stops to add?
+                                    </label>
+                                    <Input
+                                        type="number"
+                                        min="1"
+                                        max="20"
+                                        value={stopCountToGenerate}
+                                        onChange={(e) => setStopCountToGenerate(parseInt(e.target.value) || 1)}
+                                    />
+                                </div>
+                                <Button
+                                    onClick={handleGenerateTable}
+                                    className="bg-brand-green hover:bg-green-700 w-full sm:w-auto"
+                                >
+                                    Generate Table
+                                    <ArrowRight className="w-4 h-4 ml-2" />
+                                </Button>
+                            </div>
+                        ) : (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
                             >
-                                <Plus className="w-5 h-5 mr-2" />
-                                {isAddingStop ? "Adding..." : "Add Stop"}
-                            </Button>
-                        </div>
+                                <div className="space-y-4">
+                                    {/* Table Header */}
+                                    <div className="grid grid-cols-12 gap-2 mb-2 px-2 hidden sm:grid">
+                                        <div className="col-span-1 text-xs font-bold text-brand-slate uppercase">#</div>
+                                        <div className="col-span-7 text-xs font-bold text-brand-slate uppercase">Stop Name</div>
+                                        <div className="col-span-4 text-xs font-bold text-brand-slate uppercase">Time</div>
+                                    </div>
+
+                                    {/* Table Rows */}
+                                    {newStops.map((stop, index) => (
+                                        <div key={index} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-gray-50 p-2 rounded-lg sm:bg-transparent sm:p-0">
+                                            <div className="sm:col-span-1 flex items-center mb-2 sm:mb-0">
+                                                <div className="w-6 h-6 bg-brand-green/20 text-brand-green rounded-full flex items-center justify-center text-xs font-bold mr-2 sm:mr-0">
+                                                    {index + 1}
+                                                </div>
+                                                <span className="sm:hidden text-sm font-bold text-brand-slate">Stop #{index + 1}</span>
+                                            </div>
+                                            <div className="sm:col-span-7 mb-2 sm:mb-0">
+                                                <Input
+                                                    placeholder="Enter stop name"
+                                                    value={stop.name}
+                                                    onChange={(e) => updateNewStop(index, 'name', e.target.value)}
+                                                />
+                                            </div>
+                                            <div className="sm:col-span-4">
+                                                <Input
+                                                    type="time"
+                                                    value={stop.arrivalTime}
+                                                    onChange={(e) => updateNewStop(index, 'arrivalTime', e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    {error && (
+                                        <p className="text-sm text-red-500 text-center">{error}</p>
+                                    )}
+
+                                    <div className="flex gap-3 pt-4">
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => {
+                                                setIsBulkMode(false);
+                                                setNewStops([]);
+                                                setError("");
+                                            }}
+                                            className="flex-1"
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            onClick={handleSaveStops}
+                                            disabled={isSavingStops}
+                                            className="flex-1 bg-brand-green hover:bg-green-700"
+                                        >
+                                            {isSavingStops ? "Saving..." : "Save Stops"}
+                                            <Check className="w-4 h-4 ml-2" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
                     </CardContent>
                 </Card>
 
-                {/* Stops List */}
+                {/* Existing Stops List */}
                 <div>
-                    <h2 className="text-lg font-bold text-brand-slate mb-4">Trip Stops</h2>
+                    <h2 className="text-lg font-bold text-brand-slate mb-4">Existing Stops</h2>
                     {!trip.stops || trip.stops.length === 0 ? (
                         <Card>
                             <CardContent className="p-8 text-center">
                                 <MapPin className="w-16 h-16 text-brand-grey mx-auto mb-4 opacity-50" />
                                 <p className="text-brand-grey">No stops added yet</p>
-                                <p className="text-sm text-brand-grey mt-1">
-                                    Add stops to define the trip route
-                                </p>
                             </CardContent>
                         </Card>
                     ) : (
@@ -240,7 +331,7 @@ export default function TripDetailsPage({
                                         <CardContent className="p-4">
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center flex-1">
-                                                    <div className="w-8 h-8 bg-brand-green rounded-full flex items-center justify-center mr-3 shrink-0">
+                                                    <div className="w-8 h-8 bg-brand-slate rounded-full flex items-center justify-center mr-3 shrink-0">
                                                         <span className="text-white text-sm font-bold">{stop.sequence}</span>
                                                     </div>
                                                     <div className="flex-1">
