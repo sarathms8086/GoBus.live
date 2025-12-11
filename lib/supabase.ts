@@ -47,7 +47,6 @@ export interface Bus {
     occupancy: 'Low' | 'Medium' | 'High' | 'Full';
     created_at: string;
     updated_at: string;
-    stops?: BusStop[];
 }
 
 export interface BusStop {
@@ -58,10 +57,32 @@ export interface BusStop {
     sequence: number;
 }
 
+export type DayOfWeek = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+export interface Trip {
+    id: string;
+    bus_id: string;
+    trip_number: number;
+    start_time: string;
+    end_time: string | null;
+    days_of_week: DayOfWeek[];
+    is_active: boolean;
+    created_at: string;
+}
+
+export interface TripStop {
+    id: string;
+    trip_id: string;
+    name: string;
+    arrival_time: string;
+    sequence: number;
+}
+
 export interface Ticket {
     id: string;
     user_id: string;
     bus_id: string;
+    trip_id: string | null;  // Added trip reference
     bus_code: string;
     route_name: string;
     from_stop: string;
@@ -79,7 +100,16 @@ export interface Ticket {
 // ============================================
 
 export interface BusWithStops extends Bus {
-    stops: BusStop[];
+    stops?: BusStop[];
+    trips?: TripWithStops[];
+}
+
+export interface TripWithStops extends Trip {
+    stops?: TripStop[];
+}
+
+export interface BusWithTrips extends Bus {
+    trips: TripWithStops[];
 }
 
 export interface DriverWithBus extends DriverProfile {
@@ -88,4 +118,6 @@ export interface DriverWithBus extends DriverProfile {
 
 export interface TicketWithBus extends Ticket {
     bus?: Bus;
+    trip?: Trip;
 }
+

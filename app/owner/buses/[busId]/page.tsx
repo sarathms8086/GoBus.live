@@ -3,48 +3,73 @@
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, MapPin, Clock, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, MapPin, Clock, Trash2, Calendar, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion } from "framer-motion";
-import { supabase, BusWithStops, BusStop } from "@/lib/supabase";
+import { supabase, Bus, TripWithStops, DayOfWeek } from "@/lib/supabase";
 import { busApi } from "@/lib/api/buses";
+import { tripApi } from "@/lib/api/trips";
+
+const DAY_LABELS: Record<DayOfWeek, string> = {
+    mon: 'Mon',
+    tue: 'Tue',
+    wed: 'Wed',
+    thu: 'Thu',
+    fri: 'Fri',
+    sat: 'Sat',
+    sun: 'Sun',
+};
+
+const ALL_DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
 export default function BusDetailsPage({ params }: { params: Promise<{ busId: string }> }) {
     const resolvedParams = use(params);
     const router = useRouter();
-    const [bus, setBus] = useState<BusWithStops | null>(null);
-    const [stopName, setStopName] = useState("");
-    const [arrivalTime, setArrivalTime] = useState("");
-    const [error, setError] = useState("");
+    const [bus, setBus] = useState<Bus | null>(null);
+    const [trips, setTrips] = useState<TripWithStops[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isAddingStop, setIsAddingStop] = useState(false);
+    const [error, setError] = useState("");
+
+    // Add trip form
+    const [showAddTrip, setShowAddTrip] = useState(false);
+    const [newTripStartTime, setNewTripStartTime] = useState("");
+    const [newTripDays, setNewTripDays] = useState<DayOfWeek[]>(ALL_DAYS);
+    const [isAddingTrip, setIsAddingTrip] = useState(false);
 
     useEffect(() => {
         const loadBus = async () => {
             try {
-                // Check auth
                 const { data: { session } } = await supabase.auth.getSession();
                 if (!session?.user) {
                     router.push("/owner/auth/login");
                     return;
                 }
 
-                // Fetch bus with stops
-                const busData = await busApi.getById(resolvedParams.busId);
-                if (!busData) {
+                // Fetch bus
+                const { data: busData, error: busError } = await supabase
+                    .from('buses')
+                    .select('*')
+                    .eq('id', resolvedParams.busId)
+                    .single();
+
+                if (busError || !busData) {
                     router.push("/owner");
                     return;
                 }
 
-                // Verify ownership
                 if (busData.owner_id !== session.user.id) {
                     router.push("/owner");
                     return;
                 }
 
                 setBus(busData);
+
+                // Fetch trips
+                const tripData = await tripApi.getByBus(resolvedParams.busId);
+                setTrips(tripData);
+
             } catch (err) {
                 console.error('Error loading bus:', err);
                 router.push("/owner");
@@ -56,43 +81,61 @@ export default function BusDetailsPage({ params }: { params: Promise<{ busId: st
         loadBus();
     }, [resolvedParams.busId, router]);
 
-    const handleAddStop = async () => {
-        if (!stopName || !arrivalTime) {
-            setError("Please fill in all fields");
+    const handleAddTrip = async () => {
+        if (!newTripStartTime || newTripDays.length === 0) {
+            setError("Please select start time and at least one day");
             return;
         }
 
         if (!bus) return;
 
-        setIsAddingStop(true);
+        setIsAddingTrip(true);
         setError("");
 
         try {
-            const updatedBus = await busApi.addStop(bus.id, {
-                name: stopName,
-                arrival_time: arrivalTime,
+            const nextTripNumber = await tripApi.getNextTripNumber(bus.id);
+
+            const newTrip = await tripApi.create({
+                bus_id: bus.id,
+                trip_number: nextTripNumber,
+                start_time: newTripStartTime,
+                days_of_week: newTripDays,
             });
 
-            setBus(updatedBus);
-            setStopName("");
-            setArrivalTime("");
+            // Refresh trips list
+            const updatedTrips = await tripApi.getByBus(bus.id);
+            setTrips(updatedTrips);
+
+            // Reset form
+            setShowAddTrip(false);
+            setNewTripStartTime("");
+            setNewTripDays(ALL_DAYS);
         } catch (err: any) {
-            console.error('Error adding stop:', err);
-            setError(err.message || "Failed to add stop");
+            console.error('Error adding trip:', err);
+            setError(err.message || "Failed to add trip");
         } finally {
-            setIsAddingStop(false);
+            setIsAddingTrip(false);
         }
     };
 
-    const handleDeleteStop = async (stopId: string) => {
+    const handleDeleteTrip = async (tripId: string) => {
         if (!bus) return;
 
         try {
-            const updatedBus = await busApi.deleteStop(bus.id, stopId);
-            setBus(updatedBus);
+            await tripApi.delete(tripId);
+            const updatedTrips = await tripApi.getByBus(bus.id);
+            setTrips(updatedTrips);
         } catch (err: any) {
-            console.error('Error deleting stop:', err);
-            setError(err.message || "Failed to delete stop");
+            console.error('Error deleting trip:', err);
+            setError(err.message || "Failed to delete trip");
+        }
+    };
+
+    const toggleDay = (day: DayOfWeek) => {
+        if (newTripDays.includes(day)) {
+            setNewTripDays(newTripDays.filter(d => d !== day));
+        } else {
+            setNewTripDays([...newTripDays, day]);
         }
     };
 
@@ -136,80 +179,141 @@ export default function BusDetailsPage({ params }: { params: Promise<{ busId: st
                         </div>
                         <div className="flex items-center text-sm text-brand-grey">
                             <Clock className="w-4 h-4 mr-2" />
-                            <span>{bus.stops?.length || 0} stops configured</span>
+                            <span>{trips.length} trip(s) configured</span>
                         </div>
                     </CardContent>
                 </Card>
 
-                {/* Add Stop Form */}
-                <Card>
-                    <CardContent className="p-6">
-                        <h2 className="text-lg font-bold text-brand-slate mb-4">Add Stop</h2>
-                        <div className="space-y-4">
-                            <Input
-                                label="Stop Name"
-                                type="text"
-                                placeholder="e.g., Silk Board Junction"
-                                value={stopName}
-                                onChange={(e) => setStopName(e.target.value)}
-                            />
-                            <Input
-                                label="Arrival Time"
-                                type="time"
-                                value={arrivalTime}
-                                onChange={(e) => setArrivalTime(e.target.value)}
-                            />
-                            {error && (
-                                <p className="text-sm text-red-500">{error}</p>
-                            )}
-                            <Button
-                                onClick={handleAddStop}
-                                className="w-full bg-brand-green hover:bg-green-700"
-                                disabled={isAddingStop}
-                            >
-                                <Plus className="w-5 h-5 mr-2" />
-                                {isAddingStop ? "Adding..." : "Add Stop"}
-                            </Button>
-                        </div>
-                    </CardContent>
-                </Card>
+                {/* Add Trip Button/Form */}
+                {!showAddTrip ? (
+                    <Button
+                        onClick={() => setShowAddTrip(true)}
+                        className="w-full py-6 bg-brand-green hover:bg-green-700"
+                    >
+                        <Plus className="w-5 h-5 mr-2" />
+                        Add New Trip
+                    </Button>
+                ) : (
+                    <Card>
+                        <CardContent className="p-6">
+                            <h2 className="text-lg font-bold text-brand-slate mb-4">Add Trip {trips.length + 1}</h2>
+                            <div className="space-y-4">
+                                <Input
+                                    label="Trip Start Time"
+                                    type="time"
+                                    value={newTripStartTime}
+                                    onChange={(e) => setNewTripStartTime(e.target.value)}
+                                />
 
-                {/* Stops List */}
+                                <div>
+                                    <label className="block text-sm font-medium text-brand-slate mb-2">
+                                        Days of Service
+                                    </label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {ALL_DAYS.map(day => (
+                                            <button
+                                                key={day}
+                                                type="button"
+                                                onClick={() => toggleDay(day)}
+                                                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${newTripDays.includes(day)
+                                                        ? 'bg-brand-green text-white'
+                                                        : 'bg-gray-100 text-brand-grey hover:bg-gray-200'
+                                                    }`}
+                                            >
+                                                {DAY_LABELS[day]}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {error && (
+                                    <p className="text-sm text-red-500">{error}</p>
+                                )}
+
+                                <div className="flex gap-3">
+                                    <Button
+                                        onClick={handleAddTrip}
+                                        className="flex-1 bg-brand-green hover:bg-green-700"
+                                        disabled={isAddingTrip}
+                                    >
+                                        {isAddingTrip ? "Adding..." : "Add Trip"}
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            setShowAddTrip(false);
+                                            setNewTripStartTime("");
+                                            setNewTripDays(ALL_DAYS);
+                                            setError("");
+                                        }}
+                                    >
+                                        Cancel
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* Trips List */}
                 <div>
-                    <h2 className="text-lg font-bold text-brand-slate mb-4">Route Stops</h2>
-                    {!bus.stops || bus.stops.length === 0 ? (
+                    <h2 className="text-lg font-bold text-brand-slate mb-4">Daily Trips</h2>
+                    {trips.length === 0 ? (
                         <Card>
                             <CardContent className="p-8 text-center">
-                                <MapPin className="w-16 h-16 text-brand-grey mx-auto mb-4 opacity-50" />
-                                <p className="text-brand-grey">No stops added yet</p>
+                                <Calendar className="w-16 h-16 text-brand-grey mx-auto mb-4 opacity-50" />
+                                <p className="text-brand-grey">No trips added yet</p>
+                                <p className="text-sm text-brand-grey mt-1">
+                                    Add trips to define the bus schedule
+                                </p>
                             </CardContent>
                         </Card>
                     ) : (
                         <div className="space-y-3">
-                            {bus.stops.map((stop, index) => (
+                            {trips.map((trip, index) => (
                                 <motion.div
-                                    key={stop.id}
+                                    key={trip.id}
                                     initial={{ opacity: 0, x: -20 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: index * 0.05 }}
                                 >
-                                    <Card>
+                                    <Card className="hover:shadow-md transition-shadow">
                                         <CardContent className="p-4">
                                             <div className="flex items-center justify-between">
-                                                <div className="flex items-center flex-1">
-                                                    <div className="w-8 h-8 bg-brand-green rounded-full flex items-center justify-center mr-3 shrink-0">
-                                                        <span className="text-white text-sm font-bold">{stop.sequence}</span>
+                                                <Link
+                                                    href={`/owner/buses/${bus.id}/trips/${trip.id}`}
+                                                    className="flex-1"
+                                                >
+                                                    <div className="flex items-center">
+                                                        <div className="w-12 h-12 bg-brand-blue/10 rounded-xl flex items-center justify-center mr-4">
+                                                            <span className="text-brand-blue font-bold">T{trip.trip_number}</span>
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <h3 className="font-bold text-brand-slate">
+                                                                Trip {trip.trip_number} - {trip.start_time}
+                                                            </h3>
+                                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                                {trip.days_of_week.map(day => (
+                                                                    <span
+                                                                        key={day}
+                                                                        className="text-xs bg-gray-100 text-brand-grey px-2 py-0.5 rounded"
+                                                                    >
+                                                                        {DAY_LABELS[day]}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                            <p className="text-sm text-brand-grey mt-1">
+                                                                {trip.stops?.length || 0} stops
+                                                            </p>
+                                                        </div>
+                                                        <ChevronRight className="w-5 h-5 text-brand-grey" />
                                                     </div>
-                                                    <div className="flex-1">
-                                                        <h3 className="font-bold text-brand-slate">{stop.name}</h3>
-                                                        <p className="text-sm text-brand-grey">{stop.arrival_time}</p>
-                                                    </div>
-                                                </div>
+                                                </Link>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    onClick={() => handleDeleteStop(stop.id)}
-                                                    className="text-red-500 hover:bg-red-50"
+                                                    onClick={() => handleDeleteTrip(trip.id)}
+                                                    className="text-red-500 hover:bg-red-50 ml-2"
                                                 >
                                                     <Trash2 className="w-5 h-5" />
                                                 </Button>
