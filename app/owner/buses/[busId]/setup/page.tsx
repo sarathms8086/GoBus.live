@@ -116,6 +116,10 @@ export default function BusSetupPage({ params }: { params: Promise<{ busId: stri
     const [currentTripIndex, setCurrentTripIndex] = useState(0);
     const [error, setError] = useState("");
 
+    // Reverse trip feature
+    const [showReversePrompt, setShowReversePrompt] = useState(false);
+    const [selectedReverseTrip, setSelectedReverseTrip] = useState(0);
+
     useEffect(() => {
         const loadBus = async () => {
             const { data: { session } } = await supabase.auth.getSession();
@@ -160,6 +164,42 @@ export default function BusSetupPage({ params }: { params: Promise<{ busId: stri
         setTripConfigs(configs);
         setCurrentTripIndex(0);
         setStep(2);
+    };
+
+    // Check if we should show reverse trip prompt when moving to Trip 2+
+    useEffect(() => {
+        if (step === 2 && currentTripIndex > 0) {
+            // Check if any previous trip has stops configured
+            const hasPreviousStops = tripConfigs.slice(0, currentTripIndex).some(
+                trip => trip.stops.some(stop => stop.name.trim() !== '')
+            );
+            if (hasPreviousStops) {
+                setSelectedReverseTrip(0); // Default to first trip
+                setShowReversePrompt(true);
+            }
+        }
+    }, [currentTripIndex, step]);
+
+    // Apply reverse trip stops
+    const applyReverseTrip = () => {
+        const sourceTrip = tripConfigs[selectedReverseTrip];
+        const reversedStops = [...sourceTrip.stops].reverse().map(stop => ({
+            name: stop.name,
+            arrivalTime: "09:00", // Reset time for owner to fill
+        }));
+
+        const updated = [...tripConfigs];
+        updated[currentTripIndex] = {
+            ...updated[currentTripIndex],
+            numberOfStops: reversedStops.length,
+            stops: reversedStops,
+        };
+        setTripConfigs(updated);
+        setShowReversePrompt(false);
+    };
+
+    const skipReverseTrip = () => {
+        setShowReversePrompt(false);
     };
 
     const updateTripConfig = (field: keyof TripConfig, value: any) => {
@@ -395,6 +435,66 @@ export default function BusSetupPage({ params }: { params: Promise<{ busId: stri
                                 ))}
                             </div>
                         </div>
+
+                        {/* Reverse Trip Prompt */}
+                        {showReversePrompt && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                            >
+                                <Card className="border-2 border-brand-blue bg-brand-blue/5">
+                                    <CardContent className="p-4">
+                                        <div className="flex items-start gap-3">
+                                            <div className="w-10 h-10 bg-brand-blue/20 rounded-full flex items-center justify-center flex-shrink-0">
+                                                <span className="text-xl">🔄</span>
+                                            </div>
+                                            <div className="flex-1">
+                                                <h3 className="font-bold text-brand-slate mb-1">Is this a return trip?</h3>
+                                                <p className="text-sm text-brand-grey mb-3">
+                                                    Auto-fill stop names in reverse order from a previous trip. You'll only need to enter the times.
+                                                </p>
+
+                                                {currentTripIndex > 1 && (
+                                                    <div className="mb-3">
+                                                        <label className="block text-xs font-medium text-brand-slate mb-1">
+                                                            Copy from:
+                                                        </label>
+                                                        <select
+                                                            value={selectedReverseTrip}
+                                                            onChange={(e) => setSelectedReverseTrip(parseInt(e.target.value))}
+                                                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
+                                                        >
+                                                            {tripConfigs.slice(0, currentTripIndex).map((trip, i) => (
+                                                                <option key={i} value={i}>
+                                                                    Trip {trip.tripNumber} ({trip.stops.filter(s => s.name).length} stops)
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                )}
+
+                                                <div className="flex gap-2">
+                                                    <Button
+                                                        onClick={applyReverseTrip}
+                                                        size="sm"
+                                                        className="bg-brand-blue hover:bg-blue-700"
+                                                    >
+                                                        Yes, Auto-fill
+                                                    </Button>
+                                                    <Button
+                                                        onClick={skipReverseTrip}
+                                                        variant="outline"
+                                                        size="sm"
+                                                    >
+                                                        No, Enter Manually
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        )}
 
                         {/* Trip Configuration */}
                         <Card>
