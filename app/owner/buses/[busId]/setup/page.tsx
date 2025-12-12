@@ -117,7 +117,7 @@ export default function BusSetupPage({ params }: { params: Promise<{ busId: stri
     const [error, setError] = useState("");
 
     // Reverse trip feature
-    const [selectedReverseTrip, setSelectedReverseTrip] = useState(0);
+    // No extra state needed now as we apply immediately on selection
 
     useEffect(() => {
         const loadBus = async () => {
@@ -487,36 +487,35 @@ export default function BusSetupPage({ params }: { params: Promise<{ busId: stri
                                         </Button>
                                     </div>
 
-                                    {/* Reverse Trip Button - only show for Trip 2+ when previous trips have stops */}
+                                    {/* Reverse Trip Question - only show for Trip 2+ when previous trips have stops */}
                                     {currentTripIndex > 0 && tripConfigs.slice(0, currentTripIndex).some(t => t.stops.some(s => s.name.trim() !== '')) && (
-                                        <div className="mt-4 p-3 bg-brand-blue/5 border border-brand-blue/20 rounded-xl">
-                                            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                                                <div className="flex-1">
-                                                    <p className="text-sm font-medium text-brand-slate">🔄 Use reverse stops from:</p>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    {currentTripIndex > 1 ? (
-                                                        <select
-                                                            value={selectedReverseTrip}
-                                                            onChange={(e) => setSelectedReverseTrip(parseInt(e.target.value))}
-                                                            className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
-                                                        >
-                                                            {tripConfigs.slice(0, currentTripIndex).map((trip, i) => (
-                                                                <option key={i} value={i}>
-                                                                    Trip {trip.tripNumber}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                    ) : (
-                                                        <span className="text-sm text-brand-grey">Trip 1</span>
-                                                    )}
-                                                    <Button
-                                                        onClick={() => applyReverseTrip(currentTripIndex > 1 ? selectedReverseTrip : 0)}
-                                                        size="sm"
-                                                        className="bg-brand-blue hover:bg-blue-700"
-                                                    >
-                                                        Apply
-                                                    </Button>
+                                        <div className="mt-6 pt-6 border-t border-gray-100">
+                                            <label className="block text-sm font-medium text-brand-slate mb-2">
+                                                Is this a reverse of any previous trip?
+                                            </label>
+                                            <div className="relative">
+                                                <select
+                                                    className="w-full pl-4 pr-10 py-3 bg-white border border-gray-200 rounded-xl text-brand-slate appearance-none focus:outline-none focus:ring-2 focus:ring-brand-green cursor-pointer"
+                                                    onChange={(e) => {
+                                                        if (e.target.value !== "") {
+                                                            applyReverseTrip(parseInt(e.target.value));
+                                                            // Reset the select to default after applying so user can re-select if needed
+                                                            e.target.value = "";
+                                                        }
+                                                    }}
+                                                    defaultValue=""
+                                                >
+                                                    <option value="" disabled>Select a trip to reverse stops from...</option>
+                                                    {tripConfigs.slice(0, currentTripIndex).map((trip, i) => (
+                                                        <option key={i} value={i}>
+                                                            Yes, it's reverse of Trip {trip.tripNumber} ({trip.stops.filter(s => s.name).length} stops)
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-brand-grey">
+                                                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                        <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                    </svg>
                                                 </div>
                                             </div>
                                         </div>
