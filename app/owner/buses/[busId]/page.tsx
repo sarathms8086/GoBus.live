@@ -24,6 +24,96 @@ const DAY_LABELS: Record<DayOfWeek, string> = {
 
 const ALL_DAYS: DayOfWeek[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
+// Helper component for 12-hour time input with AM/PM
+const TripTimeInput = ({ value, onChange, label }: { value: string, onChange: (val: string) => void, label?: string }) => {
+    const [hour, setHour] = useState("12");
+    const [minute, setMinute] = useState("00");
+    const [ampm, setAmpm] = useState("AM");
+
+    useEffect(() => {
+        if (value) {
+            const [h, m] = value.split(':');
+            let hNum = parseInt(h);
+            const period = hNum >= 12 ? 'PM' : 'AM';
+            if (hNum > 12) hNum -= 12;
+            if (hNum === 0) hNum = 12;
+
+            setHour(hNum.toString().padStart(2, '0'));
+            setMinute(m);
+            setAmpm(period);
+        }
+    }, []);
+
+    const updateTime = (newHour: string, newMinute: string, newAmpm: string) => {
+        let h = parseInt(newHour);
+        if (newAmpm === 'PM' && h !== 12) h += 12;
+        if (newAmpm === 'AM' && h === 12) h = 0;
+        const timeStr = `${h.toString().padStart(2, '0')}:${newMinute}`;
+        onChange(timeStr);
+
+        setHour(newHour);
+        setMinute(newMinute);
+        setAmpm(newAmpm);
+    };
+
+    return (
+        <div>
+            {label && (
+                <label className="block text-sm font-medium text-brand-slate mb-2 uppercase tracking-wide">
+                    {label}
+                </label>
+            )}
+            <div className="flex items-center gap-2 p-3 border border-gray-200 rounded-xl bg-white">
+                <select
+                    value={hour}
+                    onChange={(e) => updateTime(e.target.value, minute, ampm)}
+                    className="bg-transparent border-0 text-lg font-medium text-brand-slate focus:outline-none focus:ring-0 cursor-pointer"
+                >
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(h => (
+                        <option key={h} value={h.toString().padStart(2, '0')}>
+                            {h.toString().padStart(2, '0')}
+                        </option>
+                    ))}
+                </select>
+                <span className="text-lg text-brand-grey font-medium">:</span>
+                <select
+                    value={minute}
+                    onChange={(e) => updateTime(hour, e.target.value, ampm)}
+                    className="bg-transparent border-0 text-lg font-medium text-brand-slate focus:outline-none focus:ring-0 cursor-pointer"
+                >
+                    {Array.from({ length: 60 }, (_, i) => i).map(m => (
+                        <option key={m} value={m.toString().padStart(2, '0')}>
+                            {m.toString().padStart(2, '0')}
+                        </option>
+                    ))}
+                </select>
+                <div className="flex ml-2 bg-gray-100 rounded-lg overflow-hidden">
+                    <button
+                        type="button"
+                        onClick={() => updateTime(hour, minute, 'AM')}
+                        className={`px-3 py-1.5 text-sm font-bold transition-colors ${ampm === 'AM'
+                            ? 'bg-brand-green text-white'
+                            : 'text-brand-grey hover:bg-gray-200'
+                            }`}
+                    >
+                        AM
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => updateTime(hour, minute, 'PM')}
+                        className={`px-3 py-1.5 text-sm font-bold transition-colors ${ampm === 'PM'
+                            ? 'bg-brand-green text-white'
+                            : 'text-brand-grey hover:bg-gray-200'
+                            }`}
+                    >
+                        PM
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export default function BusDetailsPage({ params }: { params: Promise<{ busId: string }> }) {
     const resolvedParams = use(params);
     const router = useRouter();
@@ -202,11 +292,10 @@ export default function BusDetailsPage({ params }: { params: Promise<{ busId: st
                         <CardContent className="p-6">
                             <h2 className="text-lg font-bold text-brand-slate mb-4">Add Trip {trips.length + 1}</h2>
                             <div className="space-y-4">
-                                <Input
+                                <TripTimeInput
                                     label="Trip Start Time"
-                                    type="time"
                                     value={newTripStartTime}
-                                    onChange={(e) => setNewTripStartTime(e.target.value)}
+                                    onChange={(val) => setNewTripStartTime(val)}
                                 />
 
                                 <div>

@@ -106,7 +106,7 @@ export default function TripDetailsPage({
 
     // Bulk Add State
     const [isBulkMode, setIsBulkMode] = useState(false);
-    const [stopCountToGenerate, setStopCountToGenerate] = useState(1);
+    const [stopCountToGenerate, setStopCountToGenerate] = useState<number | string>("");
     const [newStops, setNewStops] = useState<{ name: string; arrivalTime: string }[]>([]);
     const [isSavingStops, setIsSavingStops] = useState(false);
 
@@ -159,7 +159,19 @@ export default function TripDetailsPage({
     }, [resolvedParams.busId, resolvedParams.tripId, router]);
 
     const handleGenerateTable = () => {
-        const count = Math.max(1, Math.min(20, stopCountToGenerate));
+        if (!stopCountToGenerate || stopCountToGenerate === "") {
+            setError("Please enter the number of stops to add");
+            return;
+        }
+
+        const rawCount = typeof stopCountToGenerate === 'string' ? parseInt(stopCountToGenerate) : stopCountToGenerate;
+
+        if (isNaN(rawCount) || rawCount < 1) {
+            setError("Please enter a valid number of stops (minimum 1)");
+            return;
+        }
+
+        const count = Math.min(20, rawCount);
         // Default time 9:00 AM
         setNewStops(Array(count).fill(null).map(() => ({ name: "", arrivalTime: "09:00" })));
         setIsBulkMode(true);
@@ -201,7 +213,7 @@ export default function TripDetailsPage({
 
             // Reset form
             setIsBulkMode(false);
-            setStopCountToGenerate(1);
+            setStopCountToGenerate("");
             setNewStops([]);
         } catch (err: any) {
             console.error('Error adding stops:', err);
@@ -288,22 +300,38 @@ export default function TripDetailsPage({
                         <h2 className="text-lg font-bold text-brand-slate mb-4">Add Stops</h2>
 
                         {!isBulkMode ? (
-                            <div className="flex items-end gap-4">
-                                <div className="flex-1">
+                            <div className="space-y-4">
+                                <div>
                                     <label className="block text-sm font-medium text-brand-slate mb-2">
                                         How many stops to add?
                                     </label>
-                                    <Input
-                                        type="number"
-                                        min="1"
-                                        max="20"
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
                                         value={stopCountToGenerate}
-                                        onChange={(e) => setStopCountToGenerate(parseInt(e.target.value) || 1)}
+                                        placeholder="Enter number (e.g., 5)"
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            // Only allow digits
+                                            if (val === "" || /^\d+$/.test(val)) {
+                                                if (val === "") {
+                                                    setStopCountToGenerate("");
+                                                } else {
+                                                    const parsed = parseInt(val);
+                                                    if (!isNaN(parsed) && parsed <= 20) {
+                                                        setStopCountToGenerate(parsed);
+                                                    }
+                                                }
+                                            }
+                                        }}
+                                        className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-white text-base font-medium text-brand-slate placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-green focus:border-transparent"
                                     />
+                                    <p className="text-xs text-brand-grey mt-1">Maximum 20 stops at a time</p>
                                 </div>
                                 <Button
                                     onClick={handleGenerateTable}
-                                    className="bg-brand-green hover:bg-green-700 w-full sm:w-auto"
+                                    className="w-full bg-brand-green hover:bg-green-700"
                                 >
                                     Generate Table
                                     <ArrowRight className="w-4 h-4 ml-2" />

@@ -41,12 +41,12 @@ export default function OwnerLoginPage() {
             }
 
             if (data.user) {
-                // Verify user is an owner
+                // Verify user is an owner - use maybeSingle for faster query
                 const { data: profileData, error: profileError } = await supabase
                     .from('profiles')
                     .select('role')
                     .eq('id', data.user.id)
-                    .single();
+                    .maybeSingle();
 
                 if (profileError || profileData?.role !== 'owner') {
                     await supabase.auth.signOut();
@@ -55,11 +55,12 @@ export default function OwnerLoginPage() {
                     return;
                 }
 
-                router.push("/owner");
+                // Use replace for faster navigation (no history entry)
+                router.replace("/owner");
+                return; // Exit early, no need for finally block
             }
         } catch (err) {
             setError("An error occurred. Please try again.");
-        } finally {
             setIsLoading(false);
         }
     };
