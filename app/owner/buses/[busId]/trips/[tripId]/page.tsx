@@ -101,6 +101,7 @@ export default function TripDetailsPage({
     const router = useRouter();
     const [bus, setBus] = useState<Bus | null>(null);
     const [trip, setTrip] = useState<TripWithStops | null>(null);
+    const [allTrips, setAllTrips] = useState<TripWithStops[]>([]);
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(true);
 
@@ -147,6 +148,11 @@ export default function TripDetailsPage({
 
                 setTrip(tripData);
 
+                // Fetch all trips for reverse functionality
+                const allBusTrips = await tripApi.getByBus(resolvedParams.busId);
+                setAllTrips(allBusTrips);
+
+
             } catch (err) {
                 console.error('Error loading trip:', err);
                 router.push("/owner");
@@ -158,25 +164,7 @@ export default function TripDetailsPage({
         loadData();
     }, [resolvedParams.busId, resolvedParams.tripId, router]);
 
-    const handleGenerateTable = () => {
-        if (!stopCountToGenerate || stopCountToGenerate === "") {
-            setError("Please enter the number of stops to add");
-            return;
-        }
 
-        const rawCount = typeof stopCountToGenerate === 'string' ? parseInt(stopCountToGenerate) : stopCountToGenerate;
-
-        if (isNaN(rawCount) || rawCount < 1) {
-            setError("Please enter a valid number of stops (minimum 1)");
-            return;
-        }
-
-        const count = Math.min(20, rawCount);
-        // Default time 9:00 AM
-        setNewStops(Array(count).fill(null).map(() => ({ name: "", arrivalTime: "09:00" })));
-        setIsBulkMode(true);
-        setError("");
-    };
 
     const updateNewStop = (index: number, field: 'name' | 'arrivalTime', value: string) => {
         const updated = [...newStops];
@@ -187,10 +175,10 @@ export default function TripDetailsPage({
     const handleSaveStops = async () => {
         if (!trip) return;
 
-        // Validate
+        // Validation
         for (let i = 0; i < newStops.length; i++) {
             if (!newStops[i].name || !newStops[i].arrivalTime) {
-                setError(`Please fill in all details for Stop #${i + 1}`);
+                setError(`Please fill in all details for stop #${i + 1}`);
                 return;
             }
         }
@@ -216,11 +204,47 @@ export default function TripDetailsPage({
             setStopCountToGenerate("");
             setNewStops([]);
         } catch (err: any) {
-            console.error('Error adding stops:', err);
-            setError(err.message || "Failed to add stops");
+            setError(err.message || "Failed to save stops");
         } finally {
             setIsSavingStops(false);
         }
+    };
+
+    const handleGenerateTable = () => {
+        if (!stopCountToGenerate) {
+            setError("Please enter number of stops");
+            return;
+        }
+
+        const count = typeof stopCountToGenerate === 'string' ? parseInt(stopCountToGenerate) : stopCountToGenerate;
+        if (isNaN(count) || count <= 0 || count > 20) {
+            setError("Please enter a valid number (1-20)");
+            return;
+        }
+
+        const stops = Array(count).fill(null).map(() => ({
+            name: "",
+            arrivalTime: "09:00",
+        }));
+
+        setNewStops(stops);
+        setIsBulkMode(true);
+        setError("");
+    };
+
+    const applyReverseStopFromTrip = (sourceTripId: string) => {
+        const sourceTrip = allTrips.find(t => t.id === sourceTripId);
+        if (!sourceTrip) return;
+
+        const stopsToReverse = sourceTrip.stops || [];
+        const reversedStops = [...stopsToReverse].reverse().map(stop => ({
+            name: stop.name,
+            arrivalTime: "09:00", // Reset time
+        }));
+
+        setNewStops(reversedStops);
+        setIsBulkMode(true);
+        setError("");
     };
 
     const handleDeleteStop = async (stopId: string) => {
@@ -336,6 +360,41 @@ export default function TripDetailsPage({
                                     Generate Table
                                     <ArrowRight className="w-4 h-4 ml-2" />
                                 </Button>
+
+                                {/* Reverse Trip Question */}
+                                {allTrips.some(t => t.id !== trip?.id && (t.stops || []).length > 0) && (
+                                    <div className="mt-6 pt-6 border-t border-gray-100">
+                                        <label className="block text-sm font-medium text-brand-slate mb-2">
+                                            Is this a reverse of any previous trip?
+                                        </label>
+                                        <div className="relative">
+                                            <select
+                                                className="w-full pl-4 pr-10 py-3 bg-white border border-gray-200 rounded-xl text-brand-slate appearance-none focus:outline-none focus:ring-2 focus:ring-brand-green cursor-pointer"
+                                                onChange={(e) => {
+                                                    if (e.target.value !== "") {
+                                                        applyReverseStopFromTrip(e.target.value);
+                                                        e.target.value = "";
+                                                    }
+                                                }}
+                                                defaultValue=""
+                                            >
+                                                <option value="" disabled>Select a trip to reverse stops from...</option>
+                                                {allTrips
+                                                    .filter(t => t.id !== trip?.id && (t.stops || []).length > 0)
+                                                    .map((t) => (
+                                                        <option key={t.id} value={t.id}>
+                                                            Yes, it's reverse of Trip {t.trip_number} ({(t.stops || []).length} stops)
+                                                        </option>
+                                                    ))}
+                                            </select>
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-brand-grey">
+                                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                    <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <motion.div
