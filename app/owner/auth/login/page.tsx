@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, LogIn, Building2 } from "lucide-react";
+import { ArrowLeft, LogIn, Building2, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
@@ -15,6 +15,7 @@ export default function OwnerLoginPage() {
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -103,14 +104,37 @@ export default function OwnerLoginPage() {
                                 error={error && !email ? "This field is required" : ""}
                             />
 
-                            <Input
-                                label="Password"
-                                type="password"
-                                placeholder="Enter your password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                error={error && !password ? "This field is required" : ""}
-                            />
+                            <div className="space-y-2">
+                                <Input
+                                    label="Password"
+                                    type={showPassword ? "text" : "password"}
+                                    placeholder="Enter your password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    error={error && !password ? "This field is required" : ""}
+                                    suffix={
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="focus:outline-none hover:text-brand-slate transition-colors"
+                                        >
+                                            {showPassword ? (
+                                                <EyeOff className="w-5 h-5" />
+                                            ) : (
+                                                <Eye className="w-5 h-5" />
+                                            )}
+                                        </button>
+                                    }
+                                />
+                                <div className="flex justify-end">
+                                    <Link
+                                        href="/owner/auth/forgot-password"
+                                        className="text-sm font-medium text-brand-green hover:underline"
+                                    >
+                                        Forgot password?
+                                    </Link>
+                                </div>
+                            </div>
 
                             {error && (
                                 <div className="bg-red-50 border border-red-200 rounded-xl p-3">
