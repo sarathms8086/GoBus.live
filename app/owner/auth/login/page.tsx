@@ -29,17 +29,27 @@ export default function OwnerLoginPage() {
         }
 
         try {
+            const cleanedEmail = email.trim();
+            console.log('Attempting login for:', cleanedEmail);
+
             // Sign in with Supabase Auth
             const { data, error: authError } = await supabase.auth.signInWithPassword({
-                email,
+                email: cleanedEmail,
                 password,
             });
 
             if (authError) {
+                console.error('Auth error:', authError);
+                // Help user if it's the specific "Invalid login credentials" that usually masks unverified email
+                if (authError.message === 'Invalid login credentials') {
+                    console.warn('Hint: Check if email is verified or password is correct.');
+                }
                 setError(authError.message);
                 setIsLoading(false);
                 return;
             }
+
+            console.log('Auth success, user:', data.user?.id);
 
             if (data.user) {
                 // Verify user is an owner - use maybeSingle for faster query
@@ -49,18 +59,41 @@ export default function OwnerLoginPage() {
                     .eq('id', data.user.id)
                     .maybeSingle();
 
-                if (profileError || profileData?.role !== 'owner') {
+                console.log('Profile fetch result:', { profileData, profileError });
+
+                if (profileError) {
+                    console.error('Profile fetch error:', profileError);
+                    await supabase.auth.signOut();
+                    setError("Error verifying account status. Please try again.");
+                    setIsLoading(false);
+                    return;
+                }
+
+                if (!profileData) {
+                    console.error('No profile found for user:', data.user.id);
+                    await supabase.auth.signOut();
+                    setError("Account setup incomplete. Please contact support.");
+                    setIsLoading(false);
+                    return;
+                }
+
+                // Case-insensitive check just in case
+                const role = profileData.role?.toLowerCase();
+                if (role !== 'owner') {
+                    console.warn('Role mismatch. Expected owner, got:', role);
                     await supabase.auth.signOut();
                     setError("This login is for fleet owners only");
                     setIsLoading(false);
                     return;
                 }
 
+                console.log('Role verified. Redirecting...');
                 // Use replace for faster navigation (no history entry)
                 router.replace("/owner");
                 return; // Exit early, no need for finally block
             }
         } catch (err) {
+            console.error('Unexpected login error:', err);
             setError("An error occurred. Please try again.");
             setIsLoading(false);
         }
