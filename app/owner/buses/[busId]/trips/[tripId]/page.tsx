@@ -467,9 +467,11 @@ export default function TripDetailsPage({
                     </CardContent>
                 </Card>
 
-                {/* Existing Stops List */}
+                {/* Existing Stops List - Editable Table */}
                 <div>
-                    <h2 className="text-lg font-bold text-brand-slate mb-4">Existing Stops</h2>
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-bold text-brand-slate">Existing Stops</h2>
+                    </div>
                     {!trip.stops || trip.stops.length === 0 ? (
                         <Card>
                             <CardContent className="p-8 text-center">
@@ -478,40 +480,86 @@ export default function TripDetailsPage({
                             </CardContent>
                         </Card>
                     ) : (
-                        <div className="space-y-3">
-                            {trip.stops.map((stop, index) => (
-                                <motion.div
-                                    key={stop.id}
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: index * 0.05 }}
-                                >
-                                    <Card>
-                                        <CardContent className="p-4">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center flex-1">
-                                                    <div className="w-8 h-8 bg-brand-slate rounded-full flex items-center justify-center mr-3 shrink-0">
-                                                        <span className="text-white text-sm font-bold">{stop.sequence}</span>
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <h3 className="font-bold text-brand-slate">{stop.name}</h3>
-                                                        <p className="text-sm text-brand-grey">{stop.arrival_time}</p>
-                                                    </div>
+                        <Card>
+                            <CardContent className="p-4">
+                                <div className="space-y-2">
+                                    {trip.stops.map((stop, index) => (
+                                        <div key={stop.id}>
+                                            {/* Stop Row */}
+                                            <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-xl">
+                                                <div className="w-8 h-8 bg-brand-slate rounded-full flex items-center justify-center shrink-0">
+                                                    <span className="text-white text-sm font-bold">{stop.sequence}</span>
+                                                </div>
+                                                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    <input
+                                                        type="text"
+                                                        defaultValue={stop.name}
+                                                        onBlur={async (e) => {
+                                                            if (e.target.value !== stop.name) {
+                                                                try {
+                                                                    await tripApi.updateStop(stop.id, { name: e.target.value });
+                                                                    const updated = await tripApi.getById(trip.id);
+                                                                    if (updated) setTrip(updated);
+                                                                } catch (err) {
+                                                                    console.error('Failed to update stop name:', err);
+                                                                }
+                                                            }
+                                                        }}
+                                                        className="px-3 py-2 border border-gray-200 rounded-lg text-brand-slate font-medium focus:outline-none focus:ring-2 focus:ring-brand-green"
+                                                        placeholder="Stop name"
+                                                    />
+                                                    <CustomTimeInput
+                                                        value={stop.arrival_time}
+                                                        onChange={async (val) => {
+                                                            if (val !== stop.arrival_time) {
+                                                                try {
+                                                                    await tripApi.updateStop(stop.id, { arrival_time: val });
+                                                                    const updated = await tripApi.getById(trip.id);
+                                                                    if (updated) setTrip(updated);
+                                                                } catch (err) {
+                                                                    console.error('Failed to update stop time:', err);
+                                                                }
+                                                            }
+                                                        }}
+                                                    />
                                                 </div>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
                                                     onClick={() => handleDeleteStop(stop.id)}
-                                                    className="text-red-500 hover:bg-red-50"
+                                                    className="text-red-500 hover:bg-red-50 shrink-0"
                                                 >
-                                                    <Trash2 className="w-5 h-5" />
+                                                    <Trash2 className="w-4 h-4" />
                                                 </Button>
                                             </div>
-                                        </CardContent>
-                                    </Card>
-                                </motion.div>
-                            ))}
-                        </div>
+
+                                            {/* Insert Button Between Stops */}
+                                            <div className="flex justify-center my-1">
+                                                <button
+                                                    onClick={async () => {
+                                                        try {
+                                                            const newStop = { name: "New Stop", arrival_time: stop.arrival_time };
+                                                            const updated = await tripApi.insertStopAt(trip.id, newStop, stop.sequence);
+                                                            setTrip(updated);
+                                                        } catch (err) {
+                                                            console.error('Failed to insert stop:', err);
+                                                        }
+                                                    }}
+                                                    className="flex items-center gap-1 text-xs text-brand-green hover:bg-green-50 px-2 py-1 rounded transition-colors"
+                                                >
+                                                    <Plus className="w-3 h-3" />
+                                                    Insert stop here
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <p className="text-xs text-brand-grey text-center mt-4">
+                                    💡 Click on any stop name or time to edit. Changes save automatically.
+                                </p>
+                            </CardContent>
+                        </Card>
                     )}
                 </div>
             </div>

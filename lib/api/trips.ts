@@ -168,4 +168,86 @@ export const tripApi = {
 
         return this.getById(tripId) as Promise<TripWithStops>;
     },
+
+    /**
+     * Update a single stop's details
+     */
+    async updateStop(stopId: string, updates: { name?: string; arrival_time?: string }): Promise<void> {
+        const { error } = await supabase
+            .from('trip_stops')
+            .update(updates)
+            .eq('id', stopId);
+
+        if (error) throw error;
+    },
+
+    /**
+     * Insert a stop at a specific position
+     */
+    async insertStopAt(tripId: string, stop: { name: string; arrival_time: string }, afterSequence: number): Promise<TripWithStops> {
+        // Get all stops and shift sequences
+        const { data: existingStops, error: fetchError } = await supabase
+            .from('trip_stops')
+            .select('*')
+            .eq('trip_id', tripId)
+            .order('sequence', { ascending: true });
+
+        if (fetchError) throw fetchError;
+
+        // Shift sequences of stops after the insertion point
+        for (const s of (existingStops || [])) {
+            if (s.sequence > afterSequence) {
+                const { error } = await supabase
+                    .from('trip_stops')
+                    .update({ sequence: s.sequence + 1 })
+                    .eq('id', s.id);
+                if (error) throw error;
+            }
+        }
+
+        // Insert the new stop
+        const { error: insertError } = await supabase
+            .from('trip_stops')
+            .insert({
+                trip_id: tripId,
+                name: stop.name,
+                arrival_time: stop.arrival_time,
+                sequence: afterSequence + 1,
+            });
+
+        if (insertError) throw insertError;
+
+        return this.getById(tripId) as Promise<TripWithStops>;
+    },
+
+    /**
+     * Bulk update all stops for a trip (replaces all)
+     */
+    async replaceAllStops(tripId: string, stops: { name: string; arrival_time: string }[]): Promise<TripWithStops> {
+        // Delete all existing stops
+        const { error: deleteError } = await supabase
+            .from('trip_stops')
+            .delete()
+            .eq('trip_id', tripId);
+
+        if (deleteError) throw deleteError;
+
+        // Insert new stops with sequences
+        if (stops.length > 0) {
+            const stopsWithSequence = stops.map((s, i) => ({
+                trip_id: tripId,
+                name: s.name,
+                arrival_time: s.arrival_time,
+                sequence: i + 1,
+            }));
+
+            const { error: insertError } = await supabase
+                .from('trip_stops')
+                .insert(stopsWithSequence);
+
+            if (insertError) throw insertError;
+        }
+
+        return this.getById(tripId) as Promise<TripWithStops>;
+    },
 };
