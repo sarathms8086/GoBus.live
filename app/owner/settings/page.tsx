@@ -26,28 +26,25 @@ const settingsItems = [
         title: "Company Profile",
         description: "Update company name and contact info",
         icon: Building2,
-        href: "#",
+        href: "/owner/settings/profile",
         color: "text-blue-500",
         bgColor: "bg-blue-50",
-        disabled: true,
     },
     {
         title: "Notifications",
         description: "Configure alerts and notifications",
         icon: Bell,
-        href: "#",
+        href: "/owner/settings/notifications",
         color: "text-orange-500",
         bgColor: "bg-orange-50",
-        disabled: true,
     },
     {
         title: "Security",
         description: "Password and account security",
         icon: Shield,
-        href: "#",
+        href: "/owner/settings/security",
         color: "text-purple-500",
         bgColor: "bg-purple-50",
-        disabled: true,
     },
 ];
 
@@ -63,10 +60,9 @@ export default function OwnerSettings() {
                 {settingsItems.map((item) => (
                     <Link
                         key={item.title}
-                        href={item.disabled ? "#" : item.href}
-                        className={item.disabled ? "pointer-events-none" : ""}
+                        href={item.href}
                     >
-                        <Card className={`${item.disabled ? 'opacity-50' : 'hover:shadow-md'} transition-shadow`}>
+                        <Card className="hover:shadow-md transition-shadow">
                             <CardContent className="p-4">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
@@ -76,9 +72,6 @@ export default function OwnerSettings() {
                                         <div>
                                             <h3 className="font-bold text-brand-slate">{item.title}</h3>
                                             <p className="text-sm text-brand-grey">{item.description}</p>
-                                            {item.disabled && (
-                                                <span className="text-xs text-brand-grey">(Coming soon)</span>
-                                            )}
                                         </div>
                                     </div>
                                     <ChevronRight className="w-5 h-5 text-gray-400" />

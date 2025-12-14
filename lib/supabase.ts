@@ -23,6 +23,12 @@ export interface OwnerProfile {
     company_name: string;
     email: string | null;
     phone: string | null;
+    address?: string | null;
+    notification_preferences?: {
+        email_alerts: boolean;
+        booking_notifications: boolean;
+        bus_status_updates: boolean;
+    };
 }
 
 export interface DriverProfile {
