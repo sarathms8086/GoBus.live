@@ -18,7 +18,7 @@ export default function AddBusPage() {
         registrationNumber: "",
         routeFrom: "",
         routeTo: "",
-        totalSeats: "40",
+        totalSeats: "",
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [isLoading, setIsLoading] = useState(false);
