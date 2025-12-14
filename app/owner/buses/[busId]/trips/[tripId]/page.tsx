@@ -222,9 +222,11 @@ export default function TripDetailsPage({
             return;
         }
 
-        const stops = Array(count).fill(null).map(() => ({
+        // Use trip's start time for first stop
+        const firstStopTime = trip?.start_time || "09:00";
+        const stops = Array(count).fill(null).map((_, index) => ({
             name: "",
-            arrivalTime: "09:00",
+            arrivalTime: index === 0 ? firstStopTime : "09:00",
         }));
 
         setNewStops(stops);

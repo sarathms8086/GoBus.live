@@ -208,9 +208,17 @@ export default function BusSetupPage({ params }: { params: Promise<{ busId: stri
         const trip = updated[currentTripIndex];
 
         // Create stops array with specified count
+        // First stop uses trip's start time
         const stops = [];
         for (let i = 0; i < count; i++) {
-            stops.push(trip.stops[i] || { name: "", arrivalTime: "09:00" });
+            if (trip.stops[i]) {
+                stops.push(trip.stops[i]);
+            } else {
+                stops.push({
+                    name: "",
+                    arrivalTime: i === 0 ? trip.startTime : "09:00"
+                });
+            }
         }
 
         updated[currentTripIndex] = { ...trip, numberOfStops: count, stops };
