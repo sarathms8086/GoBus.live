@@ -13,14 +13,16 @@ import {
     TrendingUp,
     User,
     Circle,
-    ChevronRight
+    ChevronRight,
+    CreditCard
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion } from "framer-motion";
-import { supabase, Bus, DriverProfile, TripWithStops } from "@/lib/supabase";
+import { supabase, Bus, DriverProfile, TripWithStops, BankAccount } from "@/lib/supabase";
 import { busApi } from "@/lib/api/buses";
 import { tripApi } from "@/lib/api/trips";
+import { bankAccountApi } from "@/lib/api/bank-accounts";
 
 interface BusWithDetails extends Bus {
     trips?: TripWithStops[];
@@ -33,6 +35,7 @@ export default function FleetManagementPage() {
     const router = useRouter();
     const [buses, setBuses] = useState<BusWithDetails[]>([]);
     const [drivers, setDrivers] = useState<DriverProfile[]>([]);
+    const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedBus, setSelectedBus] = useState<BusWithDetails | null>(null);
 
@@ -55,6 +58,10 @@ export default function FleetManagementPage() {
                     .eq('owner_id', session.user.id);
 
                 setDrivers(driversData || []);
+
+                // Fetch bank accounts
+                const accounts = await bankAccountApi.getByOwner(session.user.id);
+                setBankAccounts(accounts);
 
                 // Fetch trips and ticket data for each bus
                 const busesWithDetails: BusWithDetails[] = await Promise.all(
@@ -235,6 +242,59 @@ export default function FleetManagementPage() {
                                 <p className="text-xs text-center text-brand-grey mt-3">
                                     No tickets sold yet. Revenue will appear here as customers book.
                                 </p>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* Bank Account Assignment Card */}
+                    <Card>
+                        <CardContent className="p-4">
+                            <div className="flex items-center justify-between mb-3">
+                                <h2 className="font-bold text-brand-slate">Bank Account</h2>
+                                <CreditCard className="w-5 h-5 text-green-500" />
+                            </div>
+
+                            {bankAccounts.length === 0 ? (
+                                <div className="text-center py-4">
+                                    <CreditCard className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                                    <p className="text-sm text-brand-grey">No bank accounts added</p>
+                                    <Link href="/owner/settings/financial">
+                                        <Button size="sm" variant="outline" className="mt-2">
+                                            Add Bank Account
+                                        </Button>
+                                    </Link>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    <select
+                                        value={selectedBus.bank_account_id || ''}
+                                        onChange={async (e) => {
+                                            const newAccountId = e.target.value || null;
+                                            try {
+                                                await bankAccountApi.assignToBus(selectedBus.id, newAccountId);
+                                                // Update local state
+                                                setSelectedBus({ ...selectedBus, bank_account_id: newAccountId });
+                                                setBuses(buses.map(b =>
+                                                    b.id === selectedBus.id ? { ...b, bank_account_id: newAccountId } : b
+                                                ));
+                                            } catch (err) {
+                                                console.error('Failed to assign account:', err);
+                                            }
+                                        }}
+                                        className="w-full p-3 border border-gray-200 rounded-xl text-brand-slate focus:outline-none focus:ring-2 focus:ring-brand-green"
+                                    >
+                                        <option value="">Select bank account...</option>
+                                        {bankAccounts.map(acc => (
+                                            <option key={acc.id} value={acc.id}>
+                                                {acc.bank_name} - ••••{acc.account_number.slice(-4)}
+                                                {acc.is_default ? ' (Default)' : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <p className="text-xs text-brand-grey text-center">
+                                        Revenue from this bus will be deposited here
+                                    </p>
+                                </div>
                             )}
                         </CardContent>
                     </Card>

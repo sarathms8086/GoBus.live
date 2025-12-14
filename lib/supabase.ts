@@ -34,6 +34,18 @@ export interface DriverProfile {
     phone: string | null;
 }
 
+export interface BankAccount {
+    id: string;
+    owner_id: string;
+    account_name: string;
+    account_number: string;
+    ifsc_code: string;
+    bank_name: string;
+    is_default: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
 export interface Bus {
     id: string;
     owner_id: string;
@@ -47,6 +59,7 @@ export interface Bus {
     current_lng: number | null;
     current_stop: string | null;
     occupancy: 'Low' | 'Medium' | 'High' | 'Full';
+    bank_account_id: string | null;
     created_at: string;
     updated_at: string;
 }
