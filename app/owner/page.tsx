@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, BusFront, MapPin, Clock, Users, LogOut, Trash2 } from "lucide-react";
+import { Plus, BusFront, MapPin, Clock, Users, LogOut, Trash2, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase, OwnerProfile, BusWithStops } from "@/lib/supabase";
@@ -238,6 +238,15 @@ export default function OwnerDashboard() {
                         <Button variant="outline" className="w-full py-6">
                             <Users className="w-5 h-5 mr-2" />
                             Manage Drivers
+                        </Button>
+                    </Link>
+                </div>
+
+                <div className="mb-6">
+                    <Link href="/owner/settings/financial">
+                        <Button variant="outline" className="w-full py-4 border-dashed border-2">
+                            <CreditCard className="w-5 h-5 mr-2 text-brand-green" />
+                            Manage Financial Accounts
                         </Button>
                     </Link>
                 </div>
