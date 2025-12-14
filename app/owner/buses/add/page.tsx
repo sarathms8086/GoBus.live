@@ -18,6 +18,7 @@ export default function AddBusPage() {
         registrationNumber: "",
         routeFrom: "",
         routeTo: "",
+        totalSeats: "40",
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [isLoading, setIsLoading] = useState(false);
@@ -68,6 +69,17 @@ export default function AddBusPage() {
             newErrors.routeTo = "Destination is required";
         }
 
+        if (!formData.totalSeats) {
+            newErrors.totalSeats = "Number of seats is required";
+        } else {
+            const seats = parseInt(formData.totalSeats);
+            if (isNaN(seats) || seats < 1) {
+                newErrors.totalSeats = "Must be at least 1 seat";
+            } else if (seats > 100) {
+                newErrors.totalSeats = "Maximum 100 seats allowed";
+            }
+        }
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -88,6 +100,7 @@ export default function AddBusPage() {
                 registration_number: formData.registrationNumber,
                 route_from: formData.routeFrom,
                 route_to: formData.routeTo,
+                total_seats: parseInt(formData.totalSeats),
             });
 
             router.push(`/owner/buses/${bus.id}/setup`);
@@ -175,6 +188,21 @@ export default function AddBusPage() {
                                     value={formData.routeTo}
                                     onChange={(e) => handleChange("routeTo", e.target.value)}
                                     error={errors.routeTo}
+                                />
+
+                                <Input
+                                    label="Number of Seats"
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder="e.g., 40"
+                                    value={formData.totalSeats}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === "" || /^\d+$/.test(val)) {
+                                            handleChange("totalSeats", val);
+                                        }
+                                    }}
+                                    error={errors.totalSeats}
                                 />
 
                                 {errors.general && (

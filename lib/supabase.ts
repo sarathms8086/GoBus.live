@@ -41,6 +41,8 @@ export interface Bus {
     ref_number: string;
     route_from: string;
     route_to: string;
+    total_seats: number;
+    current_passengers: number;
     current_lat: number | null;
     current_lng: number | null;
     current_stop: string | null;

@@ -62,6 +62,7 @@ export const busApi = {
         registration_number: string;
         route_from: string;
         route_to: string;
+        total_seats?: number;
     }): Promise<Bus> {
         const { data, error } = await supabase
             .from('buses')
