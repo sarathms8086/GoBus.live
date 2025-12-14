@@ -188,9 +188,16 @@ export default function OwnerDashboard() {
                         <h1 className="text-2xl font-bold text-brand-slate">{owner?.company_name}</h1>
                         <p className="text-sm text-brand-grey mt-1">Fleet Management</p>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={handleLogout}>
-                        <LogOut className="w-5 h-5 text-brand-grey" />
-                    </Button>
+                    <div className="flex gap-2">
+                        <Link href="/owner/settings/financial">
+                            <Button variant="ghost" size="icon" className="hover:bg-green-50">
+                                <CreditCard className="w-5 h-5 text-brand-slate" />
+                            </Button>
+                        </Link>
+                        <Button variant="ghost" size="icon" onClick={handleLogout}>
+                            <LogOut className="w-5 h-5 text-brand-grey" />
+                        </Button>
+                    </div>
                 </div>
             </header>
 
@@ -242,14 +249,7 @@ export default function OwnerDashboard() {
                     </Link>
                 </div>
 
-                <div className="mb-6">
-                    <Link href="/owner/settings/financial">
-                        <Button variant="outline" className="w-full py-4 border-dashed border-2">
-                            <CreditCard className="w-5 h-5 mr-2 text-brand-green" />
-                            Manage Financial Accounts
-                        </Button>
-                    </Link>
-                </div>
+
 
                 {/* Registered Buses */}
                 <div>
