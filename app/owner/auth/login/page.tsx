@@ -52,45 +52,10 @@ export default function OwnerLoginPage() {
             console.log('Auth success, user:', data.user?.id);
 
             if (data.user) {
-                // Verify user is an owner - use maybeSingle for faster query
-                const { data: profileData, error: profileError } = await supabase
-                    .from('profiles')
-                    .select('role')
-                    .eq('id', data.user.id)
-                    .maybeSingle();
-
-                console.log('Profile fetch result:', { profileData, profileError });
-
-                if (profileError) {
-                    console.error('Profile fetch error:', profileError);
-                    await supabase.auth.signOut();
-                    setError("Error verifying account status. Please try again.");
-                    setIsLoading(false);
-                    return;
-                }
-
-                if (!profileData) {
-                    console.error('No profile found for user:', data.user.id);
-                    await supabase.auth.signOut();
-                    setError("Account setup incomplete. Please contact support.");
-                    setIsLoading(false);
-                    return;
-                }
-
-                // Case-insensitive check just in case
-                const role = profileData.role?.toLowerCase();
-                if (role !== 'owner') {
-                    console.warn('Role mismatch. Expected owner, got:', role);
-                    await supabase.auth.signOut();
-                    setError("This login is for fleet owners only");
-                    setIsLoading(false);
-                    return;
-                }
-
-                console.log('Role verified. Redirecting...');
-                // Use replace for faster navigation (no history entry)
+                // Optimistic redirect - Dashboard will verify role
+                console.log('Auth success. Redirecting...');
                 router.replace("/owner");
-                return; // Exit early, no need for finally block
+                return;
             }
         } catch (err) {
             console.error('Unexpected login error:', err);

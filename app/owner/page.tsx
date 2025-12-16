@@ -36,72 +36,79 @@ export default function OwnerDashboard() {
                     return;
                 }
 
-                // Fetch owner profile
-                const { data: ownerData, error: ownerError } = await supabase
+                // Start concurrent fetches
+                const ownerPromise = supabase
                     .from('owner_profiles')
                     .select('*')
                     .eq('id', session.user.id)
                     .single();
 
-                if (ownerError) {
-                    console.error('Owner profile error:', ownerError);
+                const busesPromise = busApi.getByOwner(session.user.id);
 
-                    // Check if table doesn't exist (migrations not run)
-                    if (ownerError.code === '42P01' || ownerError.message.includes('does not exist')) {
-                        setError('Database tables not found. Please run the migration SQL files in Supabase SQL Editor.');
-                        setIsLoading(false);
-                        return;
-                    }
+                const [ownerResult, busesResult] = await Promise.allSettled([ownerPromise, busesPromise]);
 
-                    // Profile exists but not as owner - might need to create owner_profile
-                    if (ownerError.code === 'PGRST116') {
-                        // Try to create owner_profile if profile exists with owner role
-                        const { data: profile } = await supabase
-                            .from('profiles')
-                            .select('role, display_name')
-                            .eq('id', session.user.id)
-                            .single();
+                // Handle Owner Profile
+                if (ownerResult.status === 'fulfilled') {
+                    const { data: ownerData, error: ownerError } = ownerResult.value;
 
-                        if (profile?.role === 'owner') {
-                            // Create missing owner_profile
-                            const { data: newOwner, error: createError } = await supabase
-                                .from('owner_profiles')
-                                .insert({
-                                    id: session.user.id,
-                                    company_name: profile.display_name || 'My Company',
-                                    email: session.user.email,
-                                })
-                                .select()
+                    if (ownerError) {
+                        console.error('Owner profile error:', ownerError);
+
+                        // Check if table doesn't exist (migrations not run)
+                        if (ownerError.code === '42P01' || ownerError.message.includes('does not exist')) {
+                            setError('Database tables not found. Please run the migration SQL files in Supabase SQL Editor.');
+                            setIsLoading(false);
+                            return;
+                        }
+
+                        // Profile exists but not as owner - might need to create owner_profile
+                        if (ownerError.code === 'PGRST116') {
+                            // Try to create owner_profile if profile exists with owner role
+                            const { data: profile } = await supabase
+                                .from('profiles')
+                                .select('role, display_name')
+                                .eq('id', session.user.id)
                                 .single();
 
-                            if (!createError && newOwner) {
-                                setOwner(newOwner);
+                            if (profile?.role === 'owner') {
+                                // Create missing owner_profile
+                                const { data: newOwner, error: createError } = await supabase
+                                    .from('owner_profiles')
+                                    .insert({
+                                        id: session.user.id,
+                                        company_name: profile.display_name || 'My Company',
+                                        email: session.user.email,
+                                    })
+                                    .select()
+                                    .single();
+
+                                if (!createError && newOwner) {
+                                    setOwner(newOwner);
+                                } else {
+                                    setError('Failed to create owner profile. Check your database permissions.');
+                                    setIsLoading(false);
+                                    return;
+                                }
                             } else {
-                                setError('Failed to create owner profile. Check your database permissions.');
+                                setError('No owner profile found. Please sign up as an owner first.');
                                 setIsLoading(false);
                                 return;
                             }
                         } else {
-                            setError('No owner profile found. Please sign up as an owner first.');
+                            setError('Failed to load owner profile: ' + ownerError.message);
                             setIsLoading(false);
                             return;
                         }
                     } else {
-                        setError('Failed to load owner profile: ' + ownerError.message);
-                        setIsLoading(false);
-                        return;
+                        setOwner(ownerData);
                     }
-                } else {
-                    setOwner(ownerData);
                 }
 
-                // Fetch owner's buses
-                try {
-                    const ownerBuses = await busApi.getByOwner(session.user.id);
-                    setBuses(ownerBuses);
-                } catch (busError: any) {
-                    console.error('Error fetching buses:', busError);
-                    // Don't fail completely, just log the error
+                // Handle Buses
+                if (busesResult.status === 'fulfilled') {
+                    setBuses(busesResult.value);
+                } else {
+                    console.error('Error fetching buses:', busesResult.reason);
                 }
 
                 setIsLoading(false);
