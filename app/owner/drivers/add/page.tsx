@@ -3,51 +3,52 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, User, Check } from "lucide-react";
+import { ArrowLeft, UserPlus, Check, Copy, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion } from "framer-motion";
-import { getCurrentOwner } from "@/lib/owner-storage";
-import { getBusesByOwner } from "@/lib/bus-storage";
-import { createDriver, generatePassword } from "@/lib/driver-storage";
+import { supabase } from "@/lib/supabase";
+import { busApi } from "@/lib/api/buses";
+import { driverApi } from "@/lib/api/drivers";
 
 export default function AddDriverPage() {
     const router = useRouter();
     const [buses, setBuses] = useState<any[]>([]);
+    const [nextSlotName, setNextSlotName] = useState<string>("Driver A");
     const [formData, setFormData] = useState({
-        name: "",
-        phone: "",
         busId: "",
+        remarks: "",
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [isLoading, setIsLoading] = useState(false);
     const [createdDriver, setCreatedDriver] = useState<any>(null);
     const [generatedPassword, setGeneratedPassword] = useState("");
+    const [generatedUsername, setGeneratedUsername] = useState("");
+    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
-        const owner = getCurrentOwner();
-        if (!owner) {
-            router.push("/owner/auth/login");
-            return;
-        }
+        const loadData = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user) {
+                router.push("/owner/auth/login");
+                return;
+            }
 
-        const ownerBuses = getBusesByOwner(owner.id);
-        setBuses(ownerBuses);
+            // Load owner's buses
+            const ownerBuses = await busApi.getByOwner(session.user.id);
+            setBuses(ownerBuses);
+
+            // Get next slot name preview
+            const slotName = await driverApi.getNextSlotName(session.user.id);
+            setNextSlotName(slotName);
+        };
+
+        loadData();
     }, [router]);
 
     const validateForm = () => {
         const newErrors: Record<string, string> = {};
-
-        if (!formData.name) {
-            newErrors.name = "Driver name is required";
-        }
-
-        if (!formData.phone) {
-            newErrors.phone = "Phone number is required";
-        } else if (!/^\d{10}$/.test(formData.phone)) {
-            newErrors.phone = "Phone must be 10 digits";
-        }
 
         if (!formData.busId) {
             newErrors.busId = "Please select a bus";
@@ -64,8 +65,8 @@ export default function AddDriverPage() {
             return;
         }
 
-        const owner = getCurrentOwner();
-        if (!owner) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) {
             router.push("/owner/auth/login");
             return;
         }
@@ -73,22 +74,27 @@ export default function AddDriverPage() {
         setIsLoading(true);
 
         try {
-            const password = generatePassword();
-            const driver = createDriver(
-                owner.id,
-                formData.busId,
-                formData.name,
-                formData.phone,
-                password
-            );
+            const result = await driverApi.create(session.user.id, {
+                busId: formData.busId,
+                remarks: formData.remarks || undefined,
+            });
 
-            setCreatedDriver(driver);
-            setGeneratedPassword(password);
+            setCreatedDriver(result.driver);
+            setGeneratedUsername(result.username);
+            setGeneratedPassword(result.password);
         } catch (error: any) {
-            setErrors({ general: error.message });
+            console.error("Error creating driver:", error);
+            setErrors({ general: error.message || "Failed to create driver" });
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const copyCredentials = () => {
+        const text = `Login ID: ${generatedUsername}\nPassword: ${generatedPassword}`;
+        navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
     };
 
     if (createdDriver) {
@@ -115,22 +121,40 @@ export default function AddDriverPage() {
                                     <Check className="w-8 h-8 text-green-600" />
                                 </div>
                                 <h2 className="text-2xl font-bold text-brand-slate mb-2">
-                                    Driver Account Created!
+                                    {createdDriver.slot_name} Created!
                                 </h2>
                                 <p className="text-brand-grey mb-6">
                                     Share these credentials with the driver
                                 </p>
 
-                                <div className="bg-brand-cloud rounded-xl p-4 mb-6 text-left">
+                                <div className="bg-brand-cloud rounded-xl p-4 mb-4 text-left">
                                     <div className="mb-4">
-                                        <p className="text-xs text-brand-grey mb-1">Username</p>
-                                        <p className="font-bold text-brand-slate text-lg">{createdDriver.username}</p>
+                                        <p className="text-xs text-brand-grey mb-1">Login ID</p>
+                                        <p className="font-mono font-bold text-brand-slate text-lg">{generatedUsername}</p>
                                     </div>
                                     <div>
                                         <p className="text-xs text-brand-grey mb-1">Password</p>
-                                        <p className="font-bold text-brand-green text-2xl tracking-wider">{generatedPassword}</p>
+                                        <p className="font-mono font-bold text-brand-green text-2xl tracking-wider">{generatedPassword}</p>
                                     </div>
                                 </div>
+
+                                <Button
+                                    variant="outline"
+                                    className="w-full mb-4"
+                                    onClick={copyCredentials}
+                                >
+                                    {copied ? (
+                                        <>
+                                            <CheckCheck className="w-4 h-4 mr-2" />
+                                            Copied!
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Copy className="w-4 h-4 mr-2" />
+                                            Copy Credentials
+                                        </>
+                                    )}
+                                </Button>
 
                                 <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-6">
                                     <p className="text-xs text-yellow-800">
@@ -159,7 +183,7 @@ export default function AddDriverPage() {
                         <ArrowLeft className="w-6 h-6 text-brand-slate" />
                     </Button>
                 </Link>
-                <h1 className="text-2xl font-bold text-brand-slate">Create Driver</h1>
+                <h1 className="text-2xl font-bold text-brand-slate">Create Driver Slot</h1>
             </header>
 
             <div className="flex-1 p-6">
@@ -170,39 +194,21 @@ export default function AddDriverPage() {
                     <Card>
                         <CardContent className="p-6">
                             <div className="text-center mb-6">
-                                <div className="w-16 h-16 bg-brand-blue/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <User className="w-8 h-8 text-brand-blue" />
+                                <div className="w-16 h-16 bg-brand-green/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <UserPlus className="w-8 h-8 text-brand-green" />
                                 </div>
-                                <h2 className="text-xl font-bold text-brand-slate mb-2">
-                                    New Driver Account
+                                <h2 className="text-xl font-bold text-brand-slate mb-1">
+                                    {nextSlotName}
                                 </h2>
                                 <p className="text-sm text-brand-grey">
-                                    Create login credentials for a driver
+                                    Login credentials will be auto-generated
                                 </p>
                             </div>
 
                             <form onSubmit={handleSubmit} className="space-y-5">
-                                <Input
-                                    label="Driver Name"
-                                    type="text"
-                                    placeholder="Full name"
-                                    value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    error={errors.name}
-                                />
-
-                                <Input
-                                    label="Phone Number"
-                                    type="tel"
-                                    placeholder="10-digit phone number"
-                                    value={formData.phone}
-                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                    error={errors.phone}
-                                />
-
                                 <div>
                                     <label className="text-xs font-bold text-brand-grey uppercase tracking-wider mb-1 block ml-4">
-                                        Assign Bus
+                                        Assign to Bus *
                                     </label>
                                     <select
                                         value={formData.busId}
@@ -212,7 +218,7 @@ export default function AddDriverPage() {
                                         <option value="">Select a bus</option>
                                         {buses.map((bus) => (
                                             <option key={bus.id} value={bus.id}>
-                                                {bus.registrationNumber} ({bus.routeFrom} → {bus.routeTo})
+                                                {bus.registration_number} ({bus.route_from} → {bus.route_to})
                                             </option>
                                         ))}
                                     </select>
@@ -220,6 +226,14 @@ export default function AddDriverPage() {
                                         <p className="text-xs text-red-500 mt-1 ml-4">{errors.busId}</p>
                                     )}
                                 </div>
+
+                                <Input
+                                    label="Remarks (Optional)"
+                                    type="text"
+                                    placeholder="e.g., Raju - until Dec 20"
+                                    value={formData.remarks}
+                                    onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                                />
 
                                 {errors.general && (
                                     <div className="bg-red-50 border border-red-200 rounded-xl p-3">
@@ -229,7 +243,7 @@ export default function AddDriverPage() {
 
                                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
                                     <p className="text-xs text-blue-800">
-                                        ℹ️ Username and password will be auto-generated
+                                        ℹ️ A unique Login ID and Password will be generated for this driver slot
                                     </p>
                                 </div>
 
@@ -238,7 +252,7 @@ export default function AddDriverPage() {
                                     className="w-full py-6 text-lg bg-brand-green hover:bg-green-700"
                                     disabled={isLoading}
                                 >
-                                    {isLoading ? "Creating Driver..." : "Create Driver Account"}
+                                    {isLoading ? "Creating..." : `Create ${nextSlotName}`}
                                 </Button>
                             </form>
                         </CardContent>

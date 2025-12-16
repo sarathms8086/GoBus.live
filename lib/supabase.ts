@@ -36,8 +36,11 @@ export interface DriverProfile {
     owner_id: string;
     bus_id: string | null;
     username: string;
-    name: string;
+    slot_name: string;
+    name: string | null;
     phone: string | null;
+    remarks: string | null;
+    created_at: string;
 }
 
 export interface BankAccount {

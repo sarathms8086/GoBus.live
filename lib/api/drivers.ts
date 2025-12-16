@@ -1,5 +1,42 @@
 import { supabase, DriverProfile, DriverWithBus } from '@/lib/supabase';
 
+/**
+ * Generate the next slot name for an owner (Driver A, B, C, etc.)
+ */
+async function getNextSlotName(ownerId: string): Promise<string> {
+    const { data: existingDrivers } = await supabase
+        .from('driver_profiles')
+        .select('slot_name')
+        .eq('owner_id', ownerId)
+        .order('created_at', { ascending: true });
+
+    if (!existingDrivers || existingDrivers.length === 0) {
+        return 'Driver A';
+    }
+
+    // Find the highest slot letter used
+    const usedLetters = existingDrivers.map(d => {
+        const match = d.slot_name.match(/Driver ([A-Z])/);
+        return match ? match[1].charCodeAt(0) - 65 : -1;
+    }).filter(n => n >= 0);
+
+    const maxIndex = Math.max(...usedLetters);
+    const nextLetter = String.fromCharCode(65 + maxIndex + 1);
+    return `Driver ${nextLetter}`;
+}
+
+/**
+ * Generate a simple password for drivers
+ */
+function generatePassword(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let password = '';
+    for (let i = 0; i < 6; i++) {
+        password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return password;
+}
+
 export const driverApi = {
     /**
      * Get all drivers for an owner
@@ -12,7 +49,7 @@ export const driverApi = {
                 bus:buses(*)
             `)
             .eq('owner_id', ownerId)
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: true });
 
         if (error) throw error;
         return (data || []) as DriverWithBus[];
@@ -49,32 +86,35 @@ export const driverApi = {
     },
 
     /**
-     * Create a new driver
-     * Note: This creates both the auth user and driver profile
-     * Owners create drivers, so we use the supabase admin API via edge function
-     * For now, we'll use the regular signup and then update the profile
+     * Create a new driver slot
+     * Auto-generates slot name, username, and password
      */
     async create(
         ownerId: string,
         driverData: {
-            email: string;
-            password: string;
-            name: string;
-            phone: string;
             busId?: string;
+            remarks?: string;
         }
-    ): Promise<{ driver: DriverProfile; email: string; password: string }> {
-        // Generate a unique username
-        const username = `driver_${ownerId.slice(-4)}_${Date.now().toString().slice(-3)}`;
+    ): Promise<{ driver: DriverProfile; username: string; password: string }> {
+        // Get next slot name
+        const slotName = await getNextSlotName(ownerId);
+        const slotLetter = slotName.replace('Driver ', '').toLowerCase();
+
+        // Generate username and password
+        const username = `slot_${slotLetter}_${ownerId.slice(-4)}_${Date.now().toString().slice(-3)}`;
+        const password = generatePassword();
+
+        // Generate email for auth (internal use only)
+        const email = `${username}@driver.gobus.local`;
 
         // Create auth user with driver role
         const { data: authData, error: authError } = await supabase.auth.signUp({
-            email: driverData.email,
-            password: driverData.password,
+            email,
+            password,
             options: {
                 data: {
                     role: 'driver',
-                    display_name: driverData.name,
+                    display_name: slotName,
                 },
             },
         });
@@ -82,8 +122,7 @@ export const driverApi = {
         if (authError) throw authError;
         if (!authData.user) throw new Error('Failed to create driver account');
 
-        // The profile is created automatically by the trigger
-        // Now we need to create the driver_profile
+        // Create driver profile
         const { data, error } = await supabase
             .from('driver_profiles')
             .insert({
@@ -91,8 +130,10 @@ export const driverApi = {
                 owner_id: ownerId,
                 bus_id: driverData.busId || null,
                 username,
-                name: driverData.name,
-                phone: driverData.phone,
+                slot_name: slotName,
+                name: null,
+                phone: null,
+                remarks: driverData.remarks || null,
             })
             .select()
             .single();
@@ -101,8 +142,8 @@ export const driverApi = {
 
         return {
             driver: data as DriverProfile,
-            email: driverData.email,
-            password: driverData.password,
+            username,
+            password,
         };
     },
 
@@ -122,6 +163,13 @@ export const driverApi = {
     },
 
     /**
+     * Update driver remarks
+     */
+    async updateRemarks(id: string, remarks: string): Promise<DriverProfile> {
+        return this.update(id, { remarks });
+    },
+
+    /**
      * Assign a driver to a bus
      */
     async assignToBus(driverId: string, busId: string | null): Promise<DriverProfile> {
@@ -130,8 +178,6 @@ export const driverApi = {
 
     /**
      * Delete a driver
-     * Note: This only removes the driver_profile. The auth user remains.
-     * For full deletion, use admin/service role
      */
     async delete(id: string): Promise<void> {
         const { error } = await supabase
@@ -153,5 +199,12 @@ export const driverApi = {
 
         if (error) throw error;
         return (data || []) as DriverProfile[];
+    },
+
+    /**
+     * Get the next available slot name for preview
+     */
+    async getNextSlotName(ownerId: string): Promise<string> {
+        return getNextSlotName(ownerId);
     },
 };
