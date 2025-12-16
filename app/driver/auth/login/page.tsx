@@ -7,7 +7,9 @@ import { ArrowLeft, LogIn, Car } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
-import { authenticateDriver, setCurrentDriver } from "@/lib/driver-storage";
+import { driverApi } from "@/lib/api/drivers";
+
+const CURRENT_DRIVER_KEY = "go_bus_current_driver";
 
 export default function DriverLoginPage() {
     const router = useRouter();
@@ -27,14 +29,19 @@ export default function DriverLoginPage() {
             return;
         }
 
-        const driver = authenticateDriver(username, password);
-        setIsLoading(false);
+        try {
+            const driver = await driverApi.authenticate(username, password);
 
-        if (driver) {
-            setCurrentDriver(driver.id);
-            router.push("/driver");
-        } else {
-            setError("Invalid username or password");
+            if (driver) {
+                localStorage.setItem(CURRENT_DRIVER_KEY, driver.id);
+                router.push("/driver");
+            } else {
+                setError("Invalid username or password");
+            }
+        } catch (err) {
+            setError("Login failed. Please try again.");
+        } finally {
+            setIsLoading(false);
         }
     };
 

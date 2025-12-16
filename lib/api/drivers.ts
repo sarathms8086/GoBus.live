@@ -1,9 +1,32 @@
 import { supabase, DriverProfile, DriverWithBus } from '@/lib/supabase';
 
 /**
- * Generate the next slot name for an owner (Driver A, B, C, etc.)
+ * Generate simple password like "A1234"
  */
-async function getNextSlotName(ownerId: string): Promise<string> {
+function generateSimplePassword(slotLetter: string): string {
+    const numbers = Math.floor(1000 + Math.random() * 9000).toString();
+    return `${slotLetter}${numbers}`;
+}
+
+/**
+ * Simple hash function for password (base64 encoding)
+ * Note: In production, use proper bcrypt hashing
+ */
+function hashPassword(password: string): string {
+    return btoa(password);
+}
+
+/**
+ * Verify password
+ */
+export function verifyPassword(password: string, hash: string): boolean {
+    return hashPassword(password) === hash;
+}
+
+/**
+ * Get the next slot letter for an owner (A, B, C, etc.)
+ */
+async function getNextSlotLetter(ownerId: string): Promise<string> {
     const { data: existingDrivers } = await supabase
         .from('driver_profiles')
         .select('slot_name')
@@ -11,30 +34,19 @@ async function getNextSlotName(ownerId: string): Promise<string> {
         .order('created_at', { ascending: true });
 
     if (!existingDrivers || existingDrivers.length === 0) {
-        return 'Driver A';
+        return 'A';
     }
 
     // Find the highest slot letter used
     const usedLetters = existingDrivers.map(d => {
-        const match = d.slot_name.match(/Driver ([A-Z])/);
+        const match = d.slot_name?.match(/Driver ([A-Z])/);
         return match ? match[1].charCodeAt(0) - 65 : -1;
     }).filter(n => n >= 0);
 
-    const maxIndex = Math.max(...usedLetters);
-    const nextLetter = String.fromCharCode(65 + maxIndex + 1);
-    return `Driver ${nextLetter}`;
-}
+    if (usedLetters.length === 0) return 'A';
 
-/**
- * Generate a simple password for drivers
- */
-function generatePassword(): string {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let password = '';
-    for (let i = 0; i < 6; i++) {
-        password += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return password;
+    const maxIndex = Math.max(...usedLetters);
+    return String.fromCharCode(65 + maxIndex + 1);
 }
 
 export const driverApi = {
@@ -76,74 +88,72 @@ export const driverApi = {
     },
 
     /**
-     * Get current driver's profile (for driver dashboard)
+     * Authenticate a driver by username and password
      */
-    async getCurrentDriver(): Promise<DriverWithBus | null> {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return null;
+    async authenticate(username: string, password: string): Promise<DriverWithBus | null> {
+        const { data, error } = await supabase
+            .from('driver_profiles')
+            .select(`
+                *,
+                bus:buses(*)
+            `)
+            .eq('username', username)
+            .single();
 
-        return this.getById(user.id);
+        if (error || !data) return null;
+
+        // Verify password
+        if (data.password_hash && verifyPassword(password, data.password_hash)) {
+            return data as DriverWithBus;
+        }
+        return null;
     },
 
     /**
-     * Create a new driver slot
-     * Auto-generates slot name, username, and password
+     * Bulk create driver slots
+     * Creates multiple driver slots at once with auto-generated credentials
      */
-    async create(
+    async bulkCreate(
         ownerId: string,
-        driverData: {
-            busId?: string;
-            remarks?: string;
-        }
-    ): Promise<{ driver: DriverProfile; username: string; password: string }> {
-        // Get next slot name
-        const slotName = await getNextSlotName(ownerId);
-        const slotLetter = slotName.replace('Driver ', '').toLowerCase();
+        count: number
+    ): Promise<{ drivers: DriverProfile[]; credentials: { slotName: string; username: string; password: string }[] }> {
+        const credentials: { slotName: string; username: string; password: string }[] = [];
+        const driversToInsert: any[] = [];
 
-        // Generate username and password
-        const username = `slot_${slotLetter}_${ownerId.slice(-4)}_${Date.now().toString().slice(-3)}`;
-        const password = generatePassword();
+        // Get starting slot letter
+        let currentLetter = await getNextSlotLetter(ownerId);
+        let letterCode = currentLetter.charCodeAt(0);
 
-        // Generate email for auth (internal use only)
-        const email = `${username}@driver.gobus.local`;
+        for (let i = 0; i < count; i++) {
+            const slotLetter = String.fromCharCode(letterCode + i);
+            const slotName = `Driver ${slotLetter}`;
+            const username = `${slotLetter.toLowerCase()}${ownerId.slice(-4)}`;
+            const password = generateSimplePassword(slotLetter);
 
-        // Create auth user with driver role
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-                data: {
-                    role: 'driver',
-                    display_name: slotName,
-                },
-            },
-        });
+            credentials.push({ slotName, username, password });
 
-        if (authError) throw authError;
-        if (!authData.user) throw new Error('Failed to create driver account');
-
-        // Create driver profile
-        const { data, error } = await supabase
-            .from('driver_profiles')
-            .insert({
-                id: authData.user.id,
+            driversToInsert.push({
                 owner_id: ownerId,
-                bus_id: driverData.busId || null,
+                bus_id: null,
                 username,
                 slot_name: slotName,
                 name: null,
                 phone: null,
-                remarks: driverData.remarks || null,
-            })
-            .select()
-            .single();
+                remarks: null,
+                password_hash: hashPassword(password),
+            });
+        }
+
+        const { data, error } = await supabase
+            .from('driver_profiles')
+            .insert(driversToInsert)
+            .select();
 
         if (error) throw error;
 
         return {
-            driver: data as DriverProfile,
-            username,
-            password,
+            drivers: (data || []) as DriverProfile[],
+            credentials,
         };
     },
 
@@ -189,22 +199,27 @@ export const driverApi = {
     },
 
     /**
-     * Get drivers assigned to a specific bus
+     * Delete all drivers for an owner
      */
-    async getByBus(busId: string): Promise<DriverProfile[]> {
-        const { data, error } = await supabase
+    async deleteAllByOwner(ownerId: string): Promise<void> {
+        const { error } = await supabase
             .from('driver_profiles')
-            .select('*')
-            .eq('bus_id', busId);
+            .delete()
+            .eq('owner_id', ownerId);
 
         if (error) throw error;
-        return (data || []) as DriverProfile[];
     },
 
     /**
-     * Get the next available slot name for preview
+     * Get count of drivers for an owner
      */
-    async getNextSlotName(ownerId: string): Promise<string> {
-        return getNextSlotName(ownerId);
+    async getCount(ownerId: string): Promise<number> {
+        const { count, error } = await supabase
+            .from('driver_profiles')
+            .select('*', { count: 'exact', head: true })
+            .eq('owner_id', ownerId);
+
+        if (error) throw error;
+        return count || 0;
     },
 };
