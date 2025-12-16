@@ -135,8 +135,9 @@ export default function DriversPage() {
             });
             await loadData();
             setEditingId(null);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error saving:", error);
+            alert("Failed to save: " + (error.message || "Unknown error"));
         }
     };
 

@@ -1,11 +1,12 @@
 import { supabase, DriverProfile, DriverWithBus } from '@/lib/supabase';
 
 /**
- * Generate simple login ID like "d1" + 4 random digits = "d18085"
+ * Generate login ID: D + driverNumber + 4 random digits
+ * Example: D18285 for Driver 1
  */
 function generateLoginId(driverNumber: number): string {
     const digits = Math.floor(1000 + Math.random() * 9000).toString();
-    return `d${driverNumber}${digits}`;
+    return `D${driverNumber}${digits}`;
 }
 
 /**
