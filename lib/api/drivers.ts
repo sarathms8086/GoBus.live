@@ -1,16 +1,22 @@
 import { supabase, DriverProfile, DriverWithBus } from '@/lib/supabase';
 
 /**
- * Generate simple password like "A1234"
+ * Generate simple login ID like "d1" + 4 random digits = "d18085"
  */
-function generateSimplePassword(slotLetter: string): string {
-    const numbers = Math.floor(1000 + Math.random() * 9000).toString();
-    return `${slotLetter}${numbers}`;
+function generateLoginId(driverNumber: number): string {
+    const digits = Math.floor(1000 + Math.random() * 9000).toString();
+    return `d${driverNumber}${digits}`;
 }
 
 /**
- * Simple hash function for password (base64 encoding)
- * Note: In production, use proper bcrypt hashing
+ * Generate 4-digit password like "1234"
+ */
+function generateSimplePassword(): string {
+    return Math.floor(1000 + Math.random() * 9000).toString();
+}
+
+/**
+ * Simple hash function for password
  */
 function hashPassword(password: string): string {
     return btoa(password);
@@ -21,32 +27,6 @@ function hashPassword(password: string): string {
  */
 export function verifyPassword(password: string, hash: string): boolean {
     return hashPassword(password) === hash;
-}
-
-/**
- * Get the next slot letter for an owner (A, B, C, etc.)
- */
-async function getNextSlotLetter(ownerId: string): Promise<string> {
-    const { data: existingDrivers } = await supabase
-        .from('driver_profiles')
-        .select('slot_name')
-        .eq('owner_id', ownerId)
-        .order('created_at', { ascending: true });
-
-    if (!existingDrivers || existingDrivers.length === 0) {
-        return 'A';
-    }
-
-    // Find the highest slot letter used
-    const usedLetters = existingDrivers.map(d => {
-        const match = d.slot_name?.match(/Driver ([A-Z])/);
-        return match ? match[1].charCodeAt(0) - 65 : -1;
-    }).filter(n => n >= 0);
-
-    if (usedLetters.length === 0) return 'A';
-
-    const maxIndex = Math.max(...usedLetters);
-    return String.fromCharCode(65 + maxIndex + 1);
 }
 
 export const driverApi = {
@@ -102,7 +82,6 @@ export const driverApi = {
 
         if (error || !data) return null;
 
-        // Verify password
         if (data.password_hash && verifyPassword(password, data.password_hash)) {
             return data as DriverWithBus;
         }
@@ -110,8 +89,58 @@ export const driverApi = {
     },
 
     /**
-     * Bulk create driver slots
-     * Creates multiple driver slots at once with auto-generated credentials
+     * Get the next driver number for an owner
+     */
+    async getNextDriverNumber(ownerId: string): Promise<number> {
+        const { data } = await supabase
+            .from('driver_profiles')
+            .select('slot_name')
+            .eq('owner_id', ownerId)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (!data || data.length === 0) return 1;
+
+        // Extract number from "Driver 3" -> 3
+        const match = data[0].slot_name?.match(/Driver (\d+)/);
+        return match ? parseInt(match[1]) + 1 : 1;
+    },
+
+    /**
+     * Create a single driver slot
+     */
+    async createOne(ownerId: string): Promise<{ driver: DriverProfile; username: string; password: string }> {
+        const driverNumber = await this.getNextDriverNumber(ownerId);
+        const slotName = `Driver ${driverNumber}`;
+        const username = generateLoginId(driverNumber);
+        const password = generateSimplePassword();
+
+        const { data, error } = await supabase
+            .from('driver_profiles')
+            .insert({
+                owner_id: ownerId,
+                bus_id: null,
+                username,
+                slot_name: slotName,
+                name: null,
+                phone: null,
+                remarks: null,
+                password_hash: hashPassword(password),
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        return {
+            driver: data as DriverProfile,
+            username,
+            password,
+        };
+    },
+
+    /**
+     * Bulk create driver slots (for initial setup)
      */
     async bulkCreate(
         ownerId: string,
@@ -120,15 +149,13 @@ export const driverApi = {
         const credentials: { slotName: string; username: string; password: string }[] = [];
         const driversToInsert: any[] = [];
 
-        // Get starting slot letter
-        let currentLetter = await getNextSlotLetter(ownerId);
-        let letterCode = currentLetter.charCodeAt(0);
+        const startNumber = await this.getNextDriverNumber(ownerId);
 
         for (let i = 0; i < count; i++) {
-            const slotLetter = String.fromCharCode(letterCode + i);
-            const slotName = `Driver ${slotLetter}`;
-            const username = `${slotLetter.toLowerCase()}${ownerId.slice(-4)}`;
-            const password = generateSimplePassword(slotLetter);
+            const driverNumber = startNumber + i;
+            const slotName = `Driver ${driverNumber}`;
+            const username = generateLoginId(driverNumber);
+            const password = generateSimplePassword();
 
             credentials.push({ slotName, username, password });
 
@@ -173,13 +200,6 @@ export const driverApi = {
     },
 
     /**
-     * Update driver remarks
-     */
-    async updateRemarks(id: string, remarks: string): Promise<DriverProfile> {
-        return this.update(id, { remarks });
-    },
-
-    /**
      * Assign a driver to a bus
      */
     async assignToBus(driverId: string, busId: string | null): Promise<DriverProfile> {
@@ -187,7 +207,26 @@ export const driverApi = {
     },
 
     /**
-     * Delete a driver
+     * Delete the last driver for an owner (for minus button)
+     */
+    async deleteLastDriver(ownerId: string): Promise<void> {
+        const { data } = await supabase
+            .from('driver_profiles')
+            .select('id')
+            .eq('owner_id', ownerId)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (data && data.length > 0) {
+            await supabase
+                .from('driver_profiles')
+                .delete()
+                .eq('id', data[0].id);
+        }
+    },
+
+    /**
+     * Delete a driver by ID
      */
     async delete(id: string): Promise<void> {
         const { error } = await supabase
@@ -221,5 +260,39 @@ export const driverApi = {
 
         if (error) throw error;
         return count || 0;
+    },
+
+    /**
+     * Get buses that are NOT assigned to any driver (for dropdown)
+     */
+    async getUnassignedBuses(ownerId: string, currentDriverId?: string): Promise<any[]> {
+        // Get all owner's buses
+        const { data: allBuses } = await supabase
+            .from('buses')
+            .select('*')
+            .eq('owner_id', ownerId);
+
+        if (!allBuses) return [];
+
+        // Get all assigned bus IDs
+        const { data: drivers } = await supabase
+            .from('driver_profiles')
+            .select('bus_id')
+            .eq('owner_id', ownerId)
+            .not('bus_id', 'is', null);
+
+        const assignedBusIds = new Set(
+            drivers?.filter(d => d.bus_id && d.bus_id !== currentDriverId).map(d => d.bus_id) || []
+        );
+
+        // Return buses not in assigned set, or the current driver's bus
+        return allBuses.filter(bus => {
+            if (currentDriverId) {
+                // If editing, include the current bus even if assigned to this driver
+                const isCurrentDriversBus = drivers?.some(d => d.bus_id === bus.id);
+                return !assignedBusIds.has(bus.id);
+            }
+            return !assignedBusIds.has(bus.id);
+        });
     },
 };

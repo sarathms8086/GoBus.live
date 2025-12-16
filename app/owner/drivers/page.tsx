@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Users, Trash2, Edit2, Check, X, Eye, EyeOff, Plus, RefreshCw } from "lucide-react";
+import { ArrowLeft, Users, Plus, Minus, Edit2, Check, X, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { supabase, DriverProfile } from "@/lib/supabase";
 import { driverApi } from "@/lib/api/drivers";
 import { busApi } from "@/lib/api/buses";
@@ -29,10 +29,10 @@ interface Credential {
 export default function DriversPage() {
     const router = useRouter();
     const [drivers, setDrivers] = useState<DriverWithBus[]>([]);
-    const [buses, setBuses] = useState<any[]>([]);
+    const [allBuses, setAllBuses] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [driverCount, setDriverCount] = useState<number>(0);
-    const [inputCount, setInputCount] = useState<string>("");
+    const [isFirstTime, setIsFirstTime] = useState(false);
+    const [initialCount, setInitialCount] = useState<string>("");
     const [isCreating, setIsCreating] = useState(false);
     const [newCredentials, setNewCredentials] = useState<Credential[]>([]);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -60,8 +60,8 @@ export default function DriversPage() {
                 busApi.getByOwner(session.user.id),
             ]);
             setDrivers(ownerDrivers);
-            setBuses(ownerBuses);
-            setDriverCount(ownerDrivers.length);
+            setAllBuses(ownerBuses);
+            setIsFirstTime(ownerDrivers.length === 0);
         } catch (error) {
             console.error("Error loading data:", error);
         } finally {
@@ -69,10 +69,10 @@ export default function DriversPage() {
         }
     };
 
-    const handleCreateDrivers = async () => {
-        const count = parseInt(inputCount);
-        if (isNaN(count) || count < 1 || count > 26) {
-            alert("Please enter a number between 1 and 26");
+    const handleInitialSetup = async () => {
+        const count = parseInt(initialCount);
+        if (isNaN(count) || count < 1 || count > 50) {
+            alert("Please enter a number between 1 and 50");
             return;
         }
 
@@ -81,12 +81,43 @@ export default function DriversPage() {
             const result = await driverApi.bulkCreate(ownerId, count);
             setNewCredentials(result.credentials);
             await loadData();
-            setInputCount("");
+            setIsFirstTime(false);
         } catch (error: any) {
             console.error("Error creating drivers:", error);
             alert("Failed to create drivers: " + error.message);
         } finally {
             setIsCreating(false);
+        }
+    };
+
+    const handleAddDriver = async () => {
+        setIsCreating(true);
+        try {
+            const result = await driverApi.createOne(ownerId);
+            setNewCredentials([{
+                slotName: result.driver.slot_name,
+                username: result.username,
+                password: result.password
+            }]);
+            await loadData();
+        } catch (error: any) {
+            console.error("Error adding driver:", error);
+            alert("Failed to add driver: " + error.message);
+        } finally {
+            setIsCreating(false);
+        }
+    };
+
+    const handleRemoveDriver = async () => {
+        if (drivers.length === 0) return;
+        if (!confirm("Remove the last driver? This cannot be undone.")) return;
+
+        try {
+            await driverApi.deleteLastDriver(ownerId);
+            setNewCredentials([]);
+            await loadData();
+        } catch (error: any) {
+            console.error("Error removing driver:", error);
         }
     };
 
@@ -115,46 +146,86 @@ export default function DriversPage() {
         setEditRemarks("");
     };
 
-    const handleDelete = async (driverId: string, slotName: string) => {
-        if (!confirm(`Delete ${slotName}? This cannot be undone.`)) return;
-
-        try {
-            await driverApi.delete(driverId);
-            setDrivers(drivers.filter(d => d.id !== driverId));
-            setDriverCount(prev => prev - 1);
-        } catch (error) {
-            console.error("Error deleting:", error);
-            alert("Failed to delete driver");
-        }
-    };
-
-    const handleDeleteAll = async () => {
-        if (!confirm("Delete ALL drivers? This cannot be undone.")) return;
-
-        try {
-            await driverApi.deleteAllByOwner(ownerId);
-            setDrivers([]);
-            setDriverCount(0);
-            setNewCredentials([]);
-        } catch (error) {
-            console.error("Error deleting all:", error);
-        }
-    };
-
     const togglePassword = (id: string) => {
         setShowPasswords(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
     const getStoredPassword = (driver: DriverWithBus): string => {
-        // Check if we have the password in newCredentials
         const cred = newCredentials.find(c => c.username === driver.username);
-        return cred?.password || "••••••";
+        return cred?.password || "••••";
+    };
+
+    // Get available buses for dropdown (unassigned + current driver's bus)
+    const getAvailableBuses = (currentDriverId: string, currentBusId: string | null) => {
+        const assignedBusIds = new Set(
+            drivers
+                .filter(d => d.id !== currentDriverId && d.bus_id)
+                .map(d => d.bus_id)
+        );
+        return allBuses.filter(bus => !assignedBusIds.has(bus.id) || bus.id === currentBusId);
     };
 
     if (isLoading) {
         return (
             <main className="min-h-screen bg-brand-cloud flex items-center justify-center">
                 <p className="text-brand-grey">Loading...</p>
+            </main>
+        );
+    }
+
+    // First time setup screen
+    if (isFirstTime) {
+        return (
+            <main className="min-h-screen bg-brand-cloud flex flex-col">
+                <header className="p-6 flex items-center bg-white shadow-sm">
+                    <Link href="/owner">
+                        <Button variant="ghost" size="icon" className="mr-4">
+                            <ArrowLeft className="w-6 h-6 text-brand-slate" />
+                        </Button>
+                    </Link>
+                    <h1 className="text-2xl font-bold text-brand-slate">Driver Setup</h1>
+                </header>
+
+                <div className="flex-1 flex items-center justify-center p-6">
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="w-full max-w-md"
+                    >
+                        <Card>
+                            <CardContent className="p-8 text-center">
+                                <div className="w-20 h-20 bg-brand-green/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                                    <Users className="w-10 h-10 text-brand-green" />
+                                </div>
+                                <h2 className="text-2xl font-bold text-brand-slate mb-2">
+                                    How many drivers in your company?
+                                </h2>
+                                <p className="text-brand-grey mb-8">
+                                    We'll create login credentials for each driver
+                                </p>
+
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="50"
+                                    placeholder="Enter number of drivers"
+                                    value={initialCount}
+                                    onChange={(e) => setInitialCount(e.target.value)}
+                                    className="w-full h-14 rounded-2xl border-2 border-gray-200 px-6 text-2xl font-bold text-center focus:outline-none focus:ring-2 focus:ring-brand-green focus:border-brand-green mb-6"
+                                    autoFocus
+                                />
+
+                                <Button
+                                    onClick={handleInitialSetup}
+                                    disabled={isCreating || !initialCount}
+                                    className="w-full py-6 text-lg bg-brand-green hover:bg-green-700"
+                                >
+                                    {isCreating ? "Creating Drivers..." : "Create Driver Profiles"}
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+                </div>
             </main>
         );
     }
@@ -171,81 +242,83 @@ export default function DriversPage() {
             </header>
 
             <div className="p-6 space-y-6">
-                {/* Driver Count Input */}
+                {/* Driver Counter with Plus/Minus */}
                 <Card>
                     <CardContent className="p-6">
-                        <div className="flex items-center gap-4 mb-4">
-                            <Users className="w-8 h-8 text-brand-green" />
-                            <div>
-                                <h2 className="text-lg font-bold text-brand-slate">
-                                    {driverCount > 0 ? `${driverCount} Driver(s) Created` : "No Drivers Yet"}
-                                </h2>
-                                <p className="text-sm text-brand-grey">Enter the number of drivers in your company</p>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="w-14 h-14 bg-brand-green/10 rounded-2xl flex items-center justify-center">
+                                    <Users className="w-7 h-7 text-brand-green" />
+                                </div>
+                                <div>
+                                    <h2 className="text-3xl font-bold text-brand-slate">{drivers.length}</h2>
+                                    <p className="text-sm text-brand-grey">Driver{drivers.length !== 1 ? 's' : ''} in Company</p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={handleRemoveDriver}
+                                    disabled={drivers.length === 0 || isCreating}
+                                    className="w-12 h-12 rounded-xl border-2 border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300"
+                                >
+                                    <Minus className="w-6 h-6" />
+                                </Button>
+                                <Button
+                                    size="icon"
+                                    onClick={handleAddDriver}
+                                    disabled={isCreating}
+                                    className="w-12 h-12 rounded-xl bg-brand-green hover:bg-green-700"
+                                >
+                                    <Plus className="w-6 h-6" />
+                                </Button>
                             </div>
                         </div>
-
-                        <div className="flex gap-3">
-                            <input
-                                type="number"
-                                min="1"
-                                max="26"
-                                placeholder="How many drivers?"
-                                value={inputCount}
-                                onChange={(e) => setInputCount(e.target.value)}
-                                className="flex-1 h-12 rounded-xl border border-gray-200 px-4 text-lg font-medium focus:outline-none focus:ring-2 focus:ring-brand-green"
-                            />
-                            <Button
-                                onClick={handleCreateDrivers}
-                                disabled={isCreating || !inputCount}
-                                className="h-12 px-6 bg-brand-green hover:bg-green-700"
-                            >
-                                {isCreating ? (
-                                    <RefreshCw className="w-5 h-5 animate-spin" />
-                                ) : (
-                                    <>
-                                        <Plus className="w-5 h-5 mr-2" />
-                                        Create
-                                    </>
-                                )}
-                            </Button>
-                        </div>
-
-                        {driverCount > 0 && (
-                            <Button
-                                variant="outline"
-                                onClick={handleDeleteAll}
-                                className="mt-4 text-red-500 border-red-200 hover:bg-red-50"
-                            >
-                                <Trash2 className="w-4 h-4 mr-2" />
-                                Reset All Drivers
-                            </Button>
-                        )}
                     </CardContent>
                 </Card>
 
-                {/* New Credentials Alert */}
-                {newCredentials.length > 0 && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                    >
-                        <Card className="border-green-200 bg-green-50">
-                            <CardContent className="p-4">
-                                <h3 className="font-bold text-green-800 mb-3">✅ New Driver Credentials Created</h3>
-                                <div className="space-y-2">
-                                    {newCredentials.map((cred, i) => (
-                                        <div key={i} className="flex items-center gap-4 bg-white rounded-lg p-3">
-                                            <span className="font-bold text-brand-slate w-20">{cred.slotName}</span>
-                                            <code className="text-sm bg-gray-100 px-2 py-1 rounded">{cred.username}</code>
-                                            <code className="text-sm bg-green-100 px-2 py-1 rounded font-bold text-green-700">{cred.password}</code>
-                                        </div>
-                                    ))}
-                                </div>
-                                <p className="text-xs text-green-700 mt-3">⚠️ Save these passwords! They won't be shown again.</p>
-                            </CardContent>
-                        </Card>
-                    </motion.div>
-                )}
+                {/* New Credential Alert */}
+                <AnimatePresence>
+                    {newCredentials.length > 0 && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                        >
+                            <Card className="border-green-200 bg-green-50">
+                                <CardContent className="p-4">
+                                    <h3 className="font-bold text-green-800 mb-3">✅ New Driver Credentials</h3>
+                                    <div className="space-y-2">
+                                        {newCredentials.map((cred, i) => (
+                                            <div key={i} className="flex items-center gap-4 bg-white rounded-lg p-3">
+                                                <span className="font-bold text-brand-slate w-24">{cred.slotName}</span>
+                                                <div className="flex-1">
+                                                    <span className="text-xs text-brand-grey">Login:</span>
+                                                    <code className="ml-2 text-sm bg-gray-100 px-2 py-1 rounded font-mono">{cred.username}</code>
+                                                </div>
+                                                <div>
+                                                    <span className="text-xs text-brand-grey">Password:</span>
+                                                    <code className="ml-2 text-sm bg-green-100 px-2 py-1 rounded font-bold text-green-700">{cred.password}</code>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <p className="text-xs text-green-700 mt-3">⚠️ Save these! Passwords won't be shown again.</p>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setNewCredentials([])}
+                                        className="mt-2 text-green-700"
+                                    >
+                                        Dismiss
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {/* Drivers Table */}
                 {drivers.length > 0 && (
@@ -255,15 +328,15 @@ export default function DriversPage() {
                     >
                         <Card>
                             <CardContent className="p-0 overflow-x-auto">
-                                <table className="w-full min-w-[700px]">
+                                <table className="w-full min-w-[650px]">
                                     <thead>
                                         <tr className="border-b border-gray-200 bg-gray-50">
-                                            <th className="text-left p-4 text-xs font-bold text-brand-grey uppercase">Slot</th>
+                                            <th className="text-left p-4 text-xs font-bold text-brand-grey uppercase">Driver</th>
                                             <th className="text-left p-4 text-xs font-bold text-brand-grey uppercase">Login ID</th>
                                             <th className="text-left p-4 text-xs font-bold text-brand-grey uppercase">Password</th>
                                             <th className="text-left p-4 text-xs font-bold text-brand-grey uppercase">Assigned Bus</th>
                                             <th className="text-left p-4 text-xs font-bold text-brand-grey uppercase">Remarks</th>
-                                            <th className="text-right p-4 text-xs font-bold text-brand-grey uppercase">Actions</th>
+                                            <th className="text-right p-4 text-xs font-bold text-brand-grey uppercase w-20">Edit</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -281,7 +354,7 @@ export default function DriversPage() {
                                                 <td className="p-4">
                                                     <div className="flex items-center gap-2">
                                                         <code className="text-sm font-mono">
-                                                            {showPasswords[driver.id] ? getStoredPassword(driver) : "••••••"}
+                                                            {showPasswords[driver.id] ? getStoredPassword(driver) : "••••"}
                                                         </code>
                                                         <button
                                                             onClick={() => togglePassword(driver.id)}
@@ -296,18 +369,18 @@ export default function DriversPage() {
                                                         <select
                                                             value={editBusId}
                                                             onChange={(e) => setEditBusId(e.target.value)}
-                                                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
+                                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
                                                         >
                                                             <option value="">Not Assigned</option>
-                                                            {buses.map((bus) => (
+                                                            {getAvailableBuses(driver.id, driver.bus_id).map((bus) => (
                                                                 <option key={bus.id} value={bus.id}>
                                                                     {bus.registration_number}
                                                                 </option>
                                                             ))}
                                                         </select>
                                                     ) : (
-                                                        <span className="text-brand-slate">
-                                                            {driver.bus?.registration_number || "—"}
+                                                        <span className={driver.bus ? "text-brand-slate font-medium" : "text-brand-grey"}>
+                                                            {driver.bus?.registration_number || "Not Assigned"}
                                                         </span>
                                                     )}
                                                 </td>
@@ -318,46 +391,36 @@ export default function DriversPage() {
                                                             value={editRemarks}
                                                             onChange={(e) => setEditRemarks(e.target.value)}
                                                             placeholder="Add note..."
-                                                            className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
+                                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
                                                         />
                                                     ) : (
                                                         <span className="text-brand-grey text-sm">{driver.remarks || "—"}</span>
                                                     )}
                                                 </td>
                                                 <td className="p-4 text-right">
-                                                    <div className="flex items-center justify-end gap-1">
-                                                        {editingId === driver.id ? (
-                                                            <>
-                                                                <button
-                                                                    onClick={() => handleSave(driver.id)}
-                                                                    className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
-                                                                >
-                                                                    <Check className="w-4 h-4" />
-                                                                </button>
-                                                                <button
-                                                                    onClick={handleCancelEdit}
-                                                                    className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
-                                                                >
-                                                                    <X className="w-4 h-4" />
-                                                                </button>
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <button
-                                                                    onClick={() => handleEdit(driver)}
-                                                                    className="p-2 text-brand-grey hover:text-brand-slate hover:bg-gray-100 rounded-lg"
-                                                                >
-                                                                    <Edit2 className="w-4 h-4" />
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleDelete(driver.id, driver.slot_name)}
-                                                                    className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg"
-                                                                >
-                                                                    <Trash2 className="w-4 h-4" />
-                                                                </button>
-                                                            </>
-                                                        )}
-                                                    </div>
+                                                    {editingId === driver.id ? (
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            <button
+                                                                onClick={() => handleSave(driver.id)}
+                                                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg"
+                                                            >
+                                                                <Check className="w-5 h-5" />
+                                                            </button>
+                                                            <button
+                                                                onClick={handleCancelEdit}
+                                                                className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+                                                            >
+                                                                <X className="w-5 h-5" />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handleEdit(driver)}
+                                                            className="p-2 text-brand-grey hover:text-brand-slate hover:bg-gray-100 rounded-lg"
+                                                        >
+                                                            <Edit2 className="w-5 h-5" />
+                                                        </button>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))}
@@ -366,16 +429,6 @@ export default function DriversPage() {
                             </CardContent>
                         </Card>
                     </motion.div>
-                )}
-
-                {/* Empty State */}
-                {drivers.length === 0 && !newCredentials.length && (
-                    <Card>
-                        <CardContent className="p-8 text-center">
-                            <Users className="w-16 h-16 text-brand-grey mx-auto mb-4 opacity-50" />
-                            <p className="text-brand-grey">Enter the number of drivers above to create driver slots</p>
-                        </CardContent>
-                    </Card>
                 )}
             </div>
         </main>
