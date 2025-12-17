@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Users, Plus, Minus, Edit2, Check, X, Eye, EyeOff, Wrench } from "lucide-react";
+import { ArrowLeft, Users, Plus, Minus, Edit2, Check, X, Eye, EyeOff, Wrench, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
@@ -118,6 +118,20 @@ export default function DriversPage() {
             await loadData();
         } catch (error: any) {
             console.error("Error removing driver:", error);
+        }
+    };
+
+    const handleDeleteDriver = async (driver: DriverWithBus) => {
+        if (!confirm(`Delete ${driver.slot_name}? This cannot be undone.`)) return;
+
+        try {
+            await driverApi.delete(driver.id);
+            // Remove any stored credentials for this driver
+            setNewCredentials(prev => prev.filter(c => c.username !== driver.username));
+            await loadData();
+        } catch (error: any) {
+            console.error("Error deleting driver:", error);
+            alert("Failed to delete driver: " + (error.message || "Unknown error"));
         }
     };
 
@@ -469,6 +483,13 @@ export default function DriversPage() {
                                                                 title="Edit bus assignment & remarks"
                                                             >
                                                                 <Edit2 className="w-5 h-5" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteDriver(driver)}
+                                                                className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                                                                title="Delete driver"
+                                                            >
+                                                                <Trash2 className="w-5 h-5" />
                                                             </button>
                                                         </div>
                                                     )}
