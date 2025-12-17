@@ -97,46 +97,54 @@ export const driverApi = {
     async authenticate(username: string, password: string): Promise<DriverWithBus | null> {
         console.log("Authenticating driver:", username);
 
-        const { data, error } = await supabase
-            .from('driver_profiles')
-            .select(`
-                *,
-                bus:buses(*)
-            `)
-            .eq('username', username)
-            .single();
+        try {
+            const { data, error } = await supabase
+                .from('driver_profiles')
+                .select(`
+                    *,
+                    bus:buses(*)
+                `)
+                .eq('username', username)
+                .maybeSingle();
 
-        if (error) {
-            console.log("Query error:", error.message);
+            console.log("Query completed, error:", error?.message || "none");
+            console.log("Query completed, data:", data ? "found" : "not found");
+
+            if (error) {
+                console.log("Query error:", error.message);
+                return null;
+            }
+
+            if (!data) {
+                console.log("Driver not found with username:", username);
+                return null;
+            }
+
+            console.log("Driver found:", data.slot_name);
+            console.log("Stored hash:", data.password_hash);
+            console.log("Input password:", password);
+            console.log("Encoded input:", encodePassword(password));
+
+            // Check if password matches
+            if (data.password_hash) {
+                // Try normal verification (base64 encoded)
+                if (verifyPassword(password, data.password_hash)) {
+                    console.log("Password verified!");
+                    return data as DriverWithBus;
+                }
+                // Fallback: maybe stored password is plain text
+                if (data.password_hash === password) {
+                    console.log("Plain text password match!");
+                    return data as DriverWithBus;
+                }
+                console.log("Password mismatch");
+            }
+
+            return null;
+        } catch (err: any) {
+            console.error("Authentication error:", err.message || err);
             return null;
         }
-
-        if (!data) {
-            console.log("Driver not found");
-            return null;
-        }
-
-        console.log("Driver found:", data.slot_name);
-        console.log("Stored hash:", data.password_hash);
-        console.log("Input password:", password);
-        console.log("Encoded input:", encodePassword(password));
-
-        // Check if password matches
-        if (data.password_hash) {
-            // Try normal verification (base64 encoded)
-            if (verifyPassword(password, data.password_hash)) {
-                console.log("Password verified!");
-                return data as DriverWithBus;
-            }
-            // Fallback: maybe stored password is plain text
-            if (data.password_hash === password) {
-                console.log("Plain text password match!");
-                return data as DriverWithBus;
-            }
-            console.log("Password mismatch");
-        }
-
-        return null;
     },
 
     /**
