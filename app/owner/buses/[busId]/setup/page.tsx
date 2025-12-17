@@ -190,7 +190,26 @@ export default function BusSetupPage({ params }: { params: Promise<{ busId: stri
 
     const updateTripConfig = (field: keyof TripConfig, value: any) => {
         const updated = [...tripConfigs];
-        updated[currentTripIndex] = { ...updated[currentTripIndex], [field]: value };
+        const trip = updated[currentTripIndex];
+
+        // If startTime is changing, recalculate all stop times
+        if (field === 'startTime' && value !== trip.startTime) {
+            const [h, m] = value.split(':').map(Number);
+            const newStops = trip.stops.map((stop, index) => {
+                // Calculate time: startTime + (index * 15 minutes)
+                const totalMinutes = h * 60 + m + (index * 15);
+                const newHour = Math.floor(totalMinutes / 60) % 24;
+                const newMinute = totalMinutes % 60;
+                return {
+                    ...stop,
+                    arrivalTime: `${newHour.toString().padStart(2, '0')}:${newMinute.toString().padStart(2, '0')}`
+                };
+            });
+            updated[currentTripIndex] = { ...trip, [field]: value, stops: newStops };
+        } else {
+            updated[currentTripIndex] = { ...trip, [field]: value };
+        }
+
         setTripConfigs(updated);
     };
 
