@@ -1,13 +1,24 @@
 import { supabase, DriverProfile, DriverWithBus } from '@/lib/supabase';
 
 /**
- * Generate login ID: D + driverNumber + 4 random digits
- * Format: D12585 where D1 = Driver 1, and 2585 is 4-digit random number
- * Examples: D12585 (Driver 1), D24321 (Driver 2), D38765 (Driver 3)
+ * Extract the last 4 digits from a vehicle registration number
+ * Indian format: KL-45-N6225 → extracts "6225"
  */
-function generateLoginId(driverNumber: number): string {
-    const randomDigits = Math.floor(1000 + Math.random() * 9000).toString();
-    return `D${driverNumber}${randomDigits}`;
+function extractRegistrationSuffix(registrationNumber: string): string {
+    // Remove all non-alphanumeric characters and get last 4 characters
+    const cleaned = registrationNumber.replace(/[^a-zA-Z0-9]/g, '');
+    // Get last 4 digits only
+    const digits = cleaned.replace(/[^0-9]/g, '');
+    return digits.slice(-4) || '0000';
+}
+
+/**
+ * Generate login ID: D + driverNumber + last 4 digits from bus registration
+ * Format: D16225 where D1 = Driver 1, and 6225 is from bus registration KL-45-N6225
+ * Examples: D16225 (Driver 1), D26225 (Driver 2), D36225 (Driver 3)
+ */
+function generateLoginId(driverNumber: number, registrationSuffix: string): string {
+    return `D${driverNumber}${registrationSuffix}`;
 }
 
 /**
@@ -125,7 +136,20 @@ export const driverApi = {
     async createOne(ownerId: string): Promise<{ driver: DriverProfile; username: string; password: string }> {
         const driverNumber = await this.getNextDriverNumber(ownerId);
         const slotName = `Driver ${driverNumber}`;
-        const username = generateLoginId(driverNumber);
+
+        // Get owner's first bus registration to create login ID
+        const { data: buses } = await supabase
+            .from('buses')
+            .select('registration_number')
+            .eq('owner_id', ownerId)
+            .limit(1);
+
+        let registrationSuffix = Math.floor(1000 + Math.random() * 9000).toString();
+        if (buses && buses.length > 0 && buses[0].registration_number) {
+            registrationSuffix = extractRegistrationSuffix(buses[0].registration_number);
+        }
+
+        const username = generateLoginId(driverNumber, registrationSuffix);
         const password = generateSimplePassword();
 
         const { data, error } = await supabase
@@ -164,10 +188,22 @@ export const driverApi = {
 
         const startNumber = await this.getNextDriverNumber(ownerId);
 
+        // Get owner's first bus registration to create login IDs
+        const { data: buses } = await supabase
+            .from('buses')
+            .select('registration_number')
+            .eq('owner_id', ownerId)
+            .limit(1);
+
+        let registrationSuffix = Math.floor(1000 + Math.random() * 9000).toString();
+        if (buses && buses.length > 0 && buses[0].registration_number) {
+            registrationSuffix = extractRegistrationSuffix(buses[0].registration_number);
+        }
+
         for (let i = 0; i < count; i++) {
             const driverNumber = startNumber + i;
             const slotName = `Driver ${driverNumber}`;
-            const username = generateLoginId(driverNumber);
+            const username = generateLoginId(driverNumber, registrationSuffix);
             const password = generateSimplePassword();
 
             credentials.push({ slotName, username, password });
@@ -221,13 +257,13 @@ export const driverApi = {
 
     /**
      * Fix an existing driver's login ID to use the new format
-     * Extracts driver number from slot_name and generates new ID
+     * Extracts driver number from slot_name and generates new ID using bus registration
      */
     async fixLoginId(driverId: string): Promise<{ username: string; password: string }> {
-        // Get the driver to find their slot_name
+        // Get the driver to find their slot_name and owner_id
         const { data: driver, error: fetchError } = await supabase
             .from('driver_profiles')
-            .select('slot_name')
+            .select('slot_name, owner_id')
             .eq('id', driverId)
             .single();
 
@@ -251,7 +287,19 @@ export const driverApi = {
             }
         }
 
-        const username = generateLoginId(driverNumber);
+        // Get owner's first bus registration to create login ID
+        const { data: buses } = await supabase
+            .from('buses')
+            .select('registration_number')
+            .eq('owner_id', driver.owner_id)
+            .limit(1);
+
+        let registrationSuffix = Math.floor(1000 + Math.random() * 9000).toString();
+        if (buses && buses.length > 0 && buses[0].registration_number) {
+            registrationSuffix = extractRegistrationSuffix(buses[0].registration_number);
+        }
+
+        const username = generateLoginId(driverNumber, registrationSuffix);
         const password = generateSimplePassword();
 
         const { error: updateError } = await supabase
