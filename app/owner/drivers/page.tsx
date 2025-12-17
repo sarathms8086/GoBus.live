@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Users, Plus, Minus, Edit2, Check, X, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Users, Plus, Minus, Edit2, Check, X, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
@@ -127,6 +127,30 @@ export default function DriversPage() {
         setEditRemarks(driver.remarks || "");
     };
 
+    const handleResetCredentials = async (driver: DriverWithBus) => {
+        if (!confirm(`Reset login credentials for ${driver.slot_name}? The old login ID and password will no longer work.`)) {
+            return;
+        }
+
+        try {
+            const result = await driverApi.resetCredentials(driver.id);
+            // Add to newCredentials to show the password
+            setNewCredentials(prev => {
+                // Remove any existing credential for this driver
+                const filtered = prev.filter(c => c.slotName !== driver.slot_name);
+                return [...filtered, {
+                    slotName: driver.slot_name,
+                    username: result.username,
+                    password: result.password
+                }];
+            });
+            await loadData();
+        } catch (error: any) {
+            console.error("Error resetting credentials:", error);
+            alert("Failed to reset credentials: " + (error.message || "Unknown error"));
+        }
+    };
+
     const handleSave = async (driverId: string) => {
         try {
             await driverApi.update(driverId, {
@@ -151,9 +175,14 @@ export default function DriversPage() {
         setShowPasswords(prev => ({ ...prev, [id]: !prev[id] }));
     };
 
-    const getStoredPassword = (driver: DriverWithBus): string => {
+    const getStoredPassword = (driver: DriverWithBus): string | null => {
+        // Check if this driver's password was just created and stored in memory
         const cred = newCredentials.find(c => c.username === driver.username);
-        return cred?.password || "••••";
+        return cred?.password || null;
+    };
+
+    const canShowPassword = (driver: DriverWithBus): boolean => {
+        return newCredentials.some(c => c.username === driver.username);
     };
 
     // Get available buses for dropdown (unassigned + current driver's bus)
@@ -355,14 +384,26 @@ export default function DriversPage() {
                                                 <td className="p-4">
                                                     <div className="flex items-center gap-2">
                                                         <code className="text-sm font-mono">
-                                                            {showPasswords[driver.id] ? getStoredPassword(driver) : "••••"}
+                                                            {canShowPassword(driver) && showPasswords[driver.id]
+                                                                ? getStoredPassword(driver)
+                                                                : "••••"}
                                                         </code>
-                                                        <button
-                                                            onClick={() => togglePassword(driver.id)}
-                                                            className="p-1 text-brand-grey hover:text-brand-slate"
-                                                        >
-                                                            {showPasswords[driver.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                                        </button>
+                                                        {canShowPassword(driver) ? (
+                                                            <button
+                                                                onClick={() => togglePassword(driver.id)}
+                                                                className="p-1 text-brand-grey hover:text-brand-slate transition-colors"
+                                                                title={showPasswords[driver.id] ? "Hide password" : "Show password"}
+                                                            >
+                                                                {showPasswords[driver.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                                            </button>
+                                                        ) : (
+                                                            <span
+                                                                className="p-1 text-gray-300 cursor-not-allowed"
+                                                                title="Password was only shown when driver was created"
+                                                            >
+                                                                <Eye className="w-4 h-4" />
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </td>
                                                 <td className="p-4">
@@ -415,12 +456,22 @@ export default function DriversPage() {
                                                             </button>
                                                         </div>
                                                     ) : (
-                                                        <button
-                                                            onClick={() => handleEdit(driver)}
-                                                            className="p-2 text-brand-grey hover:text-brand-slate hover:bg-gray-100 rounded-lg"
-                                                        >
-                                                            <Edit2 className="w-5 h-5" />
-                                                        </button>
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            <button
+                                                                onClick={() => handleResetCredentials(driver)}
+                                                                className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg"
+                                                                title="Reset login ID & password"
+                                                            >
+                                                                <RefreshCw className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleEdit(driver)}
+                                                                className="p-2 text-brand-grey hover:text-brand-slate hover:bg-gray-100 rounded-lg"
+                                                                title="Edit bus assignment & remarks"
+                                                            >
+                                                                <Edit2 className="w-5 h-5" />
+                                                            </button>
+                                                        </div>
                                                     )}
                                                 </td>
                                             </tr>

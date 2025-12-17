@@ -2,11 +2,12 @@ import { supabase, DriverProfile, DriverWithBus } from '@/lib/supabase';
 
 /**
  * Generate login ID: D + driverNumber + 4 random digits
- * Example: D18285 for Driver 1
+ * Format: D12585 where D1 = Driver 1, and 2585 is 4-digit random number
+ * Examples: D12585 (Driver 1), D24321 (Driver 2), D38765 (Driver 3)
  */
 function generateLoginId(driverNumber: number): string {
-    const digits = Math.floor(1000 + Math.random() * 9000).toString();
-    return `D${driverNumber}${digits}`;
+    const randomDigits = Math.floor(1000 + Math.random() * 9000).toString();
+    return `D${driverNumber}${randomDigits}`;
 }
 
 /**
@@ -205,6 +206,40 @@ export const driverApi = {
      */
     async assignToBus(driverId: string, busId: string | null): Promise<DriverProfile> {
         return this.update(driverId, { bus_id: busId });
+    },
+
+    /**
+     * Reset/regenerate credentials for a driver with new login ID format
+     * Use this to fix existing drivers with old login ID formats
+     */
+    async resetCredentials(driverId: string): Promise<{ username: string; password: string }> {
+        // Get the driver to find their number
+        const { data: driver, error: fetchError } = await supabase
+            .from('driver_profiles')
+            .select('slot_name')
+            .eq('id', driverId)
+            .single();
+
+        if (fetchError || !driver) throw new Error('Driver not found');
+
+        // Extract driver number from slot_name (e.g., "Driver 3" -> 3)
+        const match = driver.slot_name?.match(/Driver (\d+)/);
+        const driverNumber = match ? parseInt(match[1]) : 1;
+
+        const username = generateLoginId(driverNumber);
+        const password = generateSimplePassword();
+
+        const { error: updateError } = await supabase
+            .from('driver_profiles')
+            .update({
+                username,
+                password_hash: hashPassword(password),
+            })
+            .eq('id', driverId);
+
+        if (updateError) throw updateError;
+
+        return { username, password };
     },
 
     /**
