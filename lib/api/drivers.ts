@@ -222,9 +222,23 @@ export const driverApi = {
 
         if (fetchError || !driver) throw new Error('Driver not found');
 
-        // Extract driver number from slot_name (e.g., "Driver 3" -> 3)
-        const match = driver.slot_name?.match(/Driver (\d+)/);
-        const driverNumber = match ? parseInt(match[1]) : 1;
+        // Extract driver number from slot_name
+        // Handles both "Driver 3" (number) and "Driver C" (letter) formats
+        let driverNumber = 1;
+        const slotName = driver.slot_name || '';
+
+        // Try number format first: "Driver 3"
+        const numberMatch = slotName.match(/Driver (\d+)/);
+        if (numberMatch) {
+            driverNumber = parseInt(numberMatch[1]);
+        } else {
+            // Try letter format: "Driver A", "Driver B", etc.
+            const letterMatch = slotName.match(/Driver ([A-Za-z])/);
+            if (letterMatch) {
+                // Convert letter to number: A=1, B=2, C=3, etc.
+                driverNumber = letterMatch[1].toUpperCase().charCodeAt(0) - 64;
+            }
+        }
 
         const username = generateLoginId(driverNumber);
         const password = generateSimplePassword();
