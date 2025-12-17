@@ -1,15 +1,13 @@
 import { supabase, DriverProfile, DriverWithBus } from '@/lib/supabase';
 
 /**
- * Generate unique login ID: D + driverNumber + ownerPrefix + randomDigits
- * Format: D1AB85 where D1 = Driver 1, AB = owner prefix (2 chars from owner ID), 85 = 2 random digits
- * This ensures uniqueness across different owners
+ * Generate login ID: D + driverNumber + 4 random digits
+ * Format: D12585 where D1 = Driver 1, and 2585 is 4-digit random number
+ * Examples: D12585 (Driver 1), D24321 (Driver 2), D38765 (Driver 3)
  */
-function generateLoginId(driverNumber: number, ownerId: string): string {
-    // Get 2 characters from owner ID to create a unique prefix per owner
-    const ownerPrefix = ownerId.replace(/-/g, '').slice(-4, -2).toUpperCase();
-    const randomDigits = Math.floor(10 + Math.random() * 90).toString();
-    return `D${driverNumber}${ownerPrefix}${randomDigits}`;
+function generateLoginId(driverNumber: number): string {
+    const randomDigits = Math.floor(1000 + Math.random() * 9000).toString();
+    return `D${driverNumber}${randomDigits}`;
 }
 
 /**
@@ -127,7 +125,7 @@ export const driverApi = {
     async createOne(ownerId: string): Promise<{ driver: DriverProfile; username: string; password: string }> {
         const driverNumber = await this.getNextDriverNumber(ownerId);
         const slotName = `Driver ${driverNumber}`;
-        const username = generateLoginId(driverNumber, ownerId);
+        const username = generateLoginId(driverNumber);
         const password = generateSimplePassword();
 
         const { data, error } = await supabase
@@ -169,7 +167,7 @@ export const driverApi = {
         for (let i = 0; i < count; i++) {
             const driverNumber = startNumber + i;
             const slotName = `Driver ${driverNumber}`;
-            const username = generateLoginId(driverNumber, ownerId);
+            const username = generateLoginId(driverNumber);
             const password = generateSimplePassword();
 
             credentials.push({ slotName, username, password });
@@ -219,6 +217,54 @@ export const driverApi = {
      */
     async assignToBus(driverId: string, busId: string | null): Promise<DriverProfile> {
         return this.update(driverId, { bus_id: busId });
+    },
+
+    /**
+     * Fix an existing driver's login ID to use the new format
+     * Extracts driver number from slot_name and generates new ID
+     */
+    async fixLoginId(driverId: string): Promise<{ username: string; password: string }> {
+        // Get the driver to find their slot_name
+        const { data: driver, error: fetchError } = await supabase
+            .from('driver_profiles')
+            .select('slot_name')
+            .eq('id', driverId)
+            .single();
+
+        if (fetchError || !driver) throw new Error('Driver not found');
+
+        // Extract driver number from slot_name
+        // Handles both "Driver 3" (number) and "Driver C" (letter) formats
+        let driverNumber = 1;
+        const slotName = driver.slot_name || '';
+
+        // Try number format first: "Driver 3"
+        const numberMatch = slotName.match(/Driver (\d+)/);
+        if (numberMatch) {
+            driverNumber = parseInt(numberMatch[1]);
+        } else {
+            // Try letter format: "Driver A", "Driver B", etc.
+            const letterMatch = slotName.match(/Driver ([A-Za-z])/);
+            if (letterMatch) {
+                // Convert letter to number: A=1, B=2, C=3, etc.
+                driverNumber = letterMatch[1].toUpperCase().charCodeAt(0) - 64;
+            }
+        }
+
+        const username = generateLoginId(driverNumber);
+        const password = generateSimplePassword();
+
+        const { error: updateError } = await supabase
+            .from('driver_profiles')
+            .update({
+                username,
+                password_hash: encodePassword(password),
+            })
+            .eq('id', driverId);
+
+        if (updateError) throw updateError;
+
+        return { username, password };
     },
 
     /**

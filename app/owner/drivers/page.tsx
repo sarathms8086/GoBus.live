@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Users, Plus, Minus, Edit2, Check, X, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Users, Plus, Minus, Edit2, Check, X, Eye, EyeOff, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
@@ -163,6 +163,32 @@ export default function DriversPage() {
             return decodePassword(driver.password_hash);
         }
         return '••••';
+    };
+
+    // Check if driver has old format login ID (doesn't start with 'D')
+    const hasOldLoginFormat = (driver: DriverWithBus): boolean => {
+        return !driver.username?.startsWith('D');
+    };
+
+    // Fix driver's login ID to new format
+    const handleFixLoginId = async (driver: DriverWithBus) => {
+        if (!confirm(`Update login credentials for ${driver.slot_name} to the new format? The old login ID (${driver.username}) will no longer work.`)) {
+            return;
+        }
+
+        try {
+            const result = await driverApi.fixLoginId(driver.id);
+            // Add to newCredentials to show the new password
+            setNewCredentials(prev => [...prev, {
+                slotName: driver.slot_name,
+                username: result.username,
+                password: result.password
+            }]);
+            await loadData();
+        } catch (error: any) {
+            console.error("Error fixing login ID:", error);
+            alert("Failed to fix login ID: " + (error.message || "Unknown error"));
+        }
     };
 
     // Get available buses for dropdown (unassigned + current driver's bus)
@@ -427,13 +453,24 @@ export default function DriversPage() {
                                                             </button>
                                                         </div>
                                                     ) : (
-                                                        <button
-                                                            onClick={() => handleEdit(driver)}
-                                                            className="p-2 text-brand-grey hover:text-brand-slate hover:bg-gray-100 rounded-lg"
-                                                            title="Edit bus assignment & remarks"
-                                                        >
-                                                            <Edit2 className="w-5 h-5" />
-                                                        </button>
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            {hasOldLoginFormat(driver) && (
+                                                                <button
+                                                                    onClick={() => handleFixLoginId(driver)}
+                                                                    className="p-2 text-orange-500 hover:text-orange-700 hover:bg-orange-50 rounded-lg"
+                                                                    title="Fix login ID to new format"
+                                                                >
+                                                                    <Wrench className="w-4 h-4" />
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                onClick={() => handleEdit(driver)}
+                                                                className="p-2 text-brand-grey hover:text-brand-slate hover:bg-gray-100 rounded-lg"
+                                                                title="Edit bus assignment & remarks"
+                                                            >
+                                                                <Edit2 className="w-5 h-5" />
+                                                            </button>
+                                                        </div>
                                                     )}
                                                 </td>
                                             </tr>
