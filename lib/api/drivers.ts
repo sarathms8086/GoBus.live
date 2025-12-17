@@ -95,6 +95,8 @@ export const driverApi = {
      * Authenticate a driver by username and password
      */
     async authenticate(username: string, password: string): Promise<DriverWithBus | null> {
+        console.log("Authenticating driver:", username);
+
         const { data, error } = await supabase
             .from('driver_profiles')
             .select(`
@@ -104,11 +106,36 @@ export const driverApi = {
             .eq('username', username)
             .single();
 
-        if (error || !data) return null;
-
-        if (data.password_hash && verifyPassword(password, data.password_hash)) {
-            return data as DriverWithBus;
+        if (error) {
+            console.log("Query error:", error.message);
+            return null;
         }
+
+        if (!data) {
+            console.log("Driver not found");
+            return null;
+        }
+
+        console.log("Driver found:", data.slot_name);
+        console.log("Stored hash:", data.password_hash);
+        console.log("Input password:", password);
+        console.log("Encoded input:", encodePassword(password));
+
+        // Check if password matches
+        if (data.password_hash) {
+            // Try normal verification (base64 encoded)
+            if (verifyPassword(password, data.password_hash)) {
+                console.log("Password verified!");
+                return data as DriverWithBus;
+            }
+            // Fallback: maybe stored password is plain text
+            if (data.password_hash === password) {
+                console.log("Plain text password match!");
+                return data as DriverWithBus;
+            }
+            console.log("Password mismatch");
+        }
+
         return null;
     },
 
