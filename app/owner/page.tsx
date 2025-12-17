@@ -21,6 +21,8 @@ export default function OwnerDashboard() {
     useEffect(() => {
         const checkAuthAndLoadData = async () => {
             try {
+                console.log('Starting auth check...');
+
                 // Get current session
                 const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
@@ -32,11 +34,18 @@ export default function OwnerDashboard() {
                 }
 
                 if (!session?.user) {
+                    console.log('No session, redirecting to login');
                     router.push("/owner/auth/login");
                     return;
                 }
 
-                // Start concurrent fetches
+                console.log('Session found, user:', session.user.id);
+
+                // Start concurrent fetches with timeout
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Request timed out')), 15000)
+                );
+
                 const ownerPromise = supabase
                     .from('owner_profiles')
                     .select('*')
@@ -45,7 +54,14 @@ export default function OwnerDashboard() {
 
                 const busesPromise = busApi.getByOwner(session.user.id);
 
-                const [ownerResult, busesResult] = await Promise.allSettled([ownerPromise, busesPromise]);
+                console.log('Fetching owner and buses data...');
+
+                const [ownerResult, busesResult] = await Promise.race([
+                    Promise.allSettled([ownerPromise, busesPromise]),
+                    timeoutPromise.then(() => { throw new Error('Request timed out'); })
+                ]) as [PromiseSettledResult<any>, PromiseSettledResult<any>];
+
+                console.log('Data fetched, processing...');
 
                 // Handle Owner Profile
                 if (ownerResult.status === 'fulfilled') {
@@ -102,6 +118,11 @@ export default function OwnerDashboard() {
                     } else {
                         setOwner(ownerData);
                     }
+                } else {
+                    console.error('Owner fetch failed:', ownerResult.reason);
+                    setError('Failed to fetch owner data: ' + ownerResult.reason?.message);
+                    setIsLoading(false);
+                    return;
                 }
 
                 // Handle Buses
@@ -111,6 +132,7 @@ export default function OwnerDashboard() {
                     console.error('Error fetching buses:', busesResult.reason);
                 }
 
+                console.log('Data loaded successfully');
                 setIsLoading(false);
             } catch (err: any) {
                 console.error('Dashboard error:', err);
