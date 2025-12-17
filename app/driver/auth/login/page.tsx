@@ -30,17 +30,23 @@ export default function DriverLoginPage() {
         }
 
         try {
-            const driver = await driverApi.authenticate(username, password);
+            console.log("Attempting driver login for:", username);
+            const driver = await driverApi.authenticate(username.trim(), password.trim());
+            console.log("Auth result:", driver ? "Success" : "Failed");
 
             if (driver) {
                 localStorage.setItem(CURRENT_DRIVER_KEY, driver.id);
-                router.push("/driver");
+                console.log("Driver ID stored, redirecting...");
+                // Use window.location for reliable redirect
+                window.location.href = "/driver";
+                return;
             } else {
                 setError("Invalid username or password");
+                setIsLoading(false);
             }
-        } catch (err) {
-            setError("Login failed. Please try again.");
-        } finally {
+        } catch (err: any) {
+            console.error("Login error:", err);
+            setError("Login failed: " + (err.message || "Please try again"));
             setIsLoading(false);
         }
     };
