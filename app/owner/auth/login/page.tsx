@@ -54,12 +54,8 @@ export default function OwnerLoginPage() {
             if (data.user) {
                 // Optimistic redirect - Dashboard will verify role
                 console.log('Auth success. Redirecting...');
-                // Use window.location for reliable redirect
-                window.location.href = "/owner";
+                router.replace("/owner");
                 return;
-            } else {
-                setError("Login failed. Please try again.");
-                setIsLoading(false);
             }
         } catch (err) {
             console.error('Unexpected login error:', err);
