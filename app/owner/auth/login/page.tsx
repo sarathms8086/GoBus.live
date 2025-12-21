@@ -44,7 +44,7 @@ export default function OwnerLoginPage() {
             });
 
             const result = await response.json();
-            console.log('Auth response:', response.status);
+            console.log('Auth response:', response.status, result);
 
             if (!response.ok) {
                 console.error('Auth error:', result.error);
@@ -53,16 +53,24 @@ export default function OwnerLoginPage() {
                 return;
             }
 
+            console.log('Auth success, setting session...');
+
+            // Try to set session but don't block on it
             if (result.session) {
-                // Set the session on the client
-                await supabase.auth.setSession({
-                    access_token: result.session.access_token,
-                    refresh_token: result.session.refresh_token,
-                });
+                try {
+                    await supabase.auth.setSession({
+                        access_token: result.session.access_token,
+                        refresh_token: result.session.refresh_token,
+                    });
+                    console.log('Session set successfully');
+                } catch (sessionErr) {
+                    console.warn('Failed to set session, continuing anyway:', sessionErr);
+                }
             }
 
-            console.log('Auth success. Redirecting...');
-            router.replace("/owner");
+            console.log('Redirecting to dashboard...');
+            // Use window.location for reliable redirect
+            window.location.href = "/owner";
 
         } catch (err: any) {
             console.error('Unexpected login error:', err);
