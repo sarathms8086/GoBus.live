@@ -7,7 +7,6 @@ import { ArrowLeft, LogIn, Car } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
-import { driverApi } from "@/lib/api/drivers";
 
 const CURRENT_DRIVER_KEY = "go_bus_current_driver";
 
@@ -31,17 +30,29 @@ export default function DriverLoginPage() {
 
         try {
             console.log("Attempting driver login for:", username);
-            const driver = await driverApi.authenticate(username.trim(), password.trim());
-            console.log("Auth result:", driver ? "Success" : "Failed");
 
-            if (driver) {
-                localStorage.setItem(CURRENT_DRIVER_KEY, driver.id);
+            // Use API route to bypass RLS
+            const response = await fetch('/api/driver/auth', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    username: username.trim(),
+                    password: password.trim(),
+                }),
+            });
+
+            const result = await response.json();
+            console.log("Auth response:", response.status);
+
+            if (response.ok && result.driver) {
+                localStorage.setItem(CURRENT_DRIVER_KEY, result.driver.id);
                 console.log("Driver ID stored, redirecting...");
-                // Use window.location for reliable redirect
                 window.location.href = "/driver";
                 return;
             } else {
-                setError("Invalid username or password");
+                setError(result.error || "Invalid username or password");
                 setIsLoading(false);
             }
         } catch (err: any) {

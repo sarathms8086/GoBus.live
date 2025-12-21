@@ -97,33 +97,40 @@ export const driverApi = {
     async authenticate(username: string, password: string): Promise<DriverWithBus | null> {
         console.log("Authenticating driver:", username);
 
+        // Create a promise that rejects after 10 seconds
+        const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('Request timeout - database may be blocking this query. Please contact support.')), 10000);
+        });
+
         try {
-            const { data, error } = await supabase
+            // Race between the actual query and the timeout
+            const queryPromise = supabase
                 .from('driver_profiles')
                 .select(`
                     *,
                     bus:buses(*)
                 `)
-                .eq('username', username)
+                .ilike('username', username)
                 .maybeSingle();
+
+            console.log("Waiting for database response...");
+
+            const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
 
             console.log("Query completed, error:", error?.message || "none");
             console.log("Query completed, data:", data ? "found" : "not found");
 
             if (error) {
                 console.log("Query error:", error.message);
-                return null;
+                throw new Error(error.message);
             }
 
             if (!data) {
                 console.log("Driver not found with username:", username);
-                return null;
+                throw new Error("Invalid username - account not found");
             }
 
             console.log("Driver found:", data.slot_name);
-            console.log("Stored hash:", data.password_hash);
-            console.log("Input password:", password);
-            console.log("Encoded input:", encodePassword(password));
 
             // Check if password matches
             if (data.password_hash) {
@@ -138,12 +145,13 @@ export const driverApi = {
                     return data as DriverWithBus;
                 }
                 console.log("Password mismatch");
+                throw new Error("Invalid password");
             }
 
-            return null;
+            throw new Error("Account has no password set");
         } catch (err: any) {
             console.error("Authentication error:", err.message || err);
-            return null;
+            throw err; // Re-throw to let the login page handle the error
         }
     },
 
