@@ -32,18 +32,32 @@ export default function OwnerLoginPage() {
             console.log('Attempting login for:', email.trim());
             console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'configured' : 'MISSING');
 
-            // Wrap auth call in timeout to prevent infinite hang
-            const authPromise = supabase.auth.signInWithPassword({
-                email: email.trim(),
-                password,
-            });
+            // Helper function to attempt login with timeout and retries
+            const attemptLogin = async (attempt: number): Promise<any> => {
+                console.log(`Login attempt ${attempt}...`);
 
-            const timeoutPromise = new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error('Login timeout - please check your internet connection')), 10000)
-            );
+                const authPromise = supabase.auth.signInWithPassword({
+                    email: email.trim(),
+                    password,
+                });
+
+                const timeoutPromise = new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('timeout')), 30000)
+                );
+
+                try {
+                    return await Promise.race([authPromise, timeoutPromise]);
+                } catch (err: any) {
+                    if (err.message === 'timeout' && attempt < 2) {
+                        console.log('Timeout, retrying...');
+                        return attemptLogin(attempt + 1);
+                    }
+                    throw new Error('Login timeout - please try again or check your internet connection');
+                }
+            };
 
             // Use direct Supabase auth on client (this properly stores session)
-            const { data, error: authError } = await Promise.race([authPromise, timeoutPromise]) as Awaited<typeof authPromise>;
+            const { data, error: authError } = await attemptLogin(1);
 
             if (authError) {
                 console.error('Auth error:', authError.message);
