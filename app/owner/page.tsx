@@ -23,8 +23,29 @@ export default function OwnerDashboard() {
             try {
                 console.log('Starting auth check...');
 
-                // Get current session
-                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+                // Get current session with timeout
+                const getSessionWithTimeout = async () => {
+                    const timeoutPromise = new Promise<never>((_, reject) =>
+                        setTimeout(() => reject(new Error('Session check timeout')), 5000)
+                    );
+                    return Promise.race([
+                        supabase.auth.getSession(),
+                        timeoutPromise
+                    ]);
+                };
+
+                let session = null;
+                let sessionError = null;
+
+                try {
+                    const result = await getSessionWithTimeout();
+                    session = result.data?.session;
+                    sessionError = result.error;
+                } catch (timeoutErr) {
+                    console.warn('Session check timed out, redirecting to login');
+                    router.push("/owner/auth/login");
+                    return;
+                }
 
                 if (sessionError) {
                     console.error('Session error:', sessionError);
