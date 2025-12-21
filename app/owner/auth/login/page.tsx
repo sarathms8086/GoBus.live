@@ -55,16 +55,22 @@ export default function OwnerLoginPage() {
 
             console.log('Auth success, setting session...');
 
-            // Try to set session but don't block on it
+            // Set session with timeout to prevent hanging
             if (result.session) {
+                const setSessionPromise = supabase.auth.setSession({
+                    access_token: result.session.access_token,
+                    refresh_token: result.session.refresh_token,
+                });
+
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Session set timeout')), 3000)
+                );
+
                 try {
-                    await supabase.auth.setSession({
-                        access_token: result.session.access_token,
-                        refresh_token: result.session.refresh_token,
-                    });
+                    await Promise.race([setSessionPromise, timeoutPromise]);
                     console.log('Session set successfully');
                 } catch (sessionErr) {
-                    console.warn('Failed to set session, continuing anyway:', sessionErr);
+                    console.warn('Session set issue (continuing anyway):', sessionErr);
                 }
             }
 
