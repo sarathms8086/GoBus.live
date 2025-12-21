@@ -31,50 +31,42 @@ export default function OwnerLoginPage() {
         try {
             console.log('Attempting login for:', email.trim());
 
-            // Use API route for authentication (runs on server)
-            const response = await fetch('/api/owner/auth', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    email: email.trim(),
-                    password,
-                }),
+            // Use direct Supabase auth on client (this properly stores session)
+            const { data, error: authError } = await supabase.auth.signInWithPassword({
+                email: email.trim(),
+                password,
             });
 
-            const result = await response.json();
-            console.log('Auth response:', response.status, result);
-
-            if (!response.ok) {
-                console.error('Auth error:', result.error);
-                setError(result.error || 'Login failed');
+            if (authError) {
+                console.error('Auth error:', authError.message);
+                setError(authError.message);
                 setIsLoading(false);
                 return;
             }
 
-            console.log('Auth success, setting session...');
-
-            // Set session with timeout to prevent hanging
-            if (result.session) {
-                const setSessionPromise = supabase.auth.setSession({
-                    access_token: result.session.access_token,
-                    refresh_token: result.session.refresh_token,
-                });
-
-                const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Session set timeout')), 3000)
-                );
-
-                try {
-                    await Promise.race([setSessionPromise, timeoutPromise]);
-                    console.log('Session set successfully');
-                } catch (sessionErr) {
-                    console.warn('Session set issue (continuing anyway):', sessionErr);
-                }
+            if (!data.user) {
+                setError('Login failed - no user returned');
+                setIsLoading(false);
+                return;
             }
 
-            console.log('Redirecting to dashboard...');
+            console.log('Auth success, user:', data.user.id);
+
+            // Verify user is an owner
+            const { data: profileData } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', data.user.id)
+                .single();
+
+            if (profileData?.role !== 'owner') {
+                await supabase.auth.signOut();
+                setError('This login is for fleet owners only');
+                setIsLoading(false);
+                return;
+            }
+
+            console.log('Owner verified, redirecting to dashboard...');
             // Use window.location for reliable redirect
             window.location.href = "/owner";
 
