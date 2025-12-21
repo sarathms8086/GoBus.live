@@ -32,11 +32,19 @@ export default function OwnerLoginPage() {
             const cleanedEmail = email.trim();
             console.log('Attempting login for:', cleanedEmail);
 
+            // Create a timeout promise
+            const timeoutPromise = new Promise<never>((_, reject) => {
+                setTimeout(() => reject(new Error('Login request timed out. Please check your internet connection and try again.')), 15000);
+            });
+
             // Sign in with Supabase Auth
-            const { data, error: authError } = await supabase.auth.signInWithPassword({
+            const authPromise = supabase.auth.signInWithPassword({
                 email: cleanedEmail,
                 password,
             });
+
+            // Race between auth and timeout
+            const { data, error: authError } = await Promise.race([authPromise, timeoutPromise]);
 
             if (authError) {
                 console.error('Auth error:', authError);
@@ -57,9 +65,9 @@ export default function OwnerLoginPage() {
                 router.replace("/owner");
                 return;
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Unexpected login error:', err);
-            setError("An error occurred. Please try again.");
+            setError(err.message || "An error occurred. Please try again.");
             setIsLoading(false);
         }
     };
