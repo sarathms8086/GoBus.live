@@ -30,12 +30,20 @@ export default function OwnerLoginPage() {
 
         try {
             console.log('Attempting login for:', email.trim());
+            console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'configured' : 'MISSING');
 
-            // Use direct Supabase auth on client (this properly stores session)
-            const { data, error: authError } = await supabase.auth.signInWithPassword({
+            // Wrap auth call in timeout to prevent infinite hang
+            const authPromise = supabase.auth.signInWithPassword({
                 email: email.trim(),
                 password,
             });
+
+            const timeoutPromise = new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('Login timeout - please check your internet connection')), 10000)
+            );
+
+            // Use direct Supabase auth on client (this properly stores session)
+            const { data, error: authError } = await Promise.race([authPromise, timeoutPromise]) as Awaited<typeof authPromise>;
 
             if (authError) {
                 console.error('Auth error:', authError.message);
