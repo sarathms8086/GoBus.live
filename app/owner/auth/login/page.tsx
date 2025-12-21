@@ -29,42 +29,41 @@ export default function OwnerLoginPage() {
         }
 
         try {
-            const cleanedEmail = email.trim();
-            console.log('Attempting login for:', cleanedEmail);
+            console.log('Attempting login for:', email.trim());
 
-            // Create a timeout promise
-            const timeoutPromise = new Promise<never>((_, reject) => {
-                setTimeout(() => reject(new Error('Login request timed out. Please check your internet connection and try again.')), 15000);
+            // Use API route for authentication (runs on server)
+            const response = await fetch('/api/owner/auth', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: email.trim(),
+                    password,
+                }),
             });
 
-            // Sign in with Supabase Auth
-            const authPromise = supabase.auth.signInWithPassword({
-                email: cleanedEmail,
-                password,
-            });
+            const result = await response.json();
+            console.log('Auth response:', response.status);
 
-            // Race between auth and timeout
-            const { data, error: authError } = await Promise.race([authPromise, timeoutPromise]);
-
-            if (authError) {
-                console.error('Auth error:', authError);
-                // Help user if it's the specific "Invalid login credentials" that usually masks unverified email
-                if (authError.message === 'Invalid login credentials') {
-                    console.warn('Hint: Check if email is verified or password is correct.');
-                }
-                setError(authError.message);
+            if (!response.ok) {
+                console.error('Auth error:', result.error);
+                setError(result.error || 'Login failed');
                 setIsLoading(false);
                 return;
             }
 
-            console.log('Auth success, user:', data.user?.id);
-
-            if (data.user) {
-                // Optimistic redirect - Dashboard will verify role
-                console.log('Auth success. Redirecting...');
-                router.replace("/owner");
-                return;
+            if (result.session) {
+                // Set the session on the client
+                await supabase.auth.setSession({
+                    access_token: result.session.access_token,
+                    refresh_token: result.session.refresh_token,
+                });
             }
+
+            console.log('Auth success. Redirecting...');
+            router.replace("/owner");
+
         } catch (err: any) {
             console.error('Unexpected login error:', err);
             setError(err.message || "An error occurred. Please try again.");
