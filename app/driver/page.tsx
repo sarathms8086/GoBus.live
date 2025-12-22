@@ -292,10 +292,10 @@ export default function DriverDashboard() {
                                             transition={{ delay: 0.1 * index }}
                                         >
                                             <Card className={`overflow-hidden shadow-md transition-all duration-300 ${tripStatus.status === 'live'
-                                                    ? 'border-2 border-brand-green bg-green-50 ring-2 ring-green-200'
-                                                    : tripStatus.status === 'upcoming'
-                                                        ? 'border border-gray-200 bg-white hover:shadow-lg'
-                                                        : 'border border-gray-100 bg-gray-50 opacity-60'
+                                                ? 'border-2 border-brand-green bg-green-50 ring-2 ring-green-200'
+                                                : tripStatus.status === 'upcoming'
+                                                    ? 'border border-gray-200 bg-white hover:shadow-lg'
+                                                    : 'border border-gray-100 bg-gray-50 opacity-60'
                                                 }`}>
                                                 <CardContent className="p-5">
                                                     <div className="flex items-start justify-between mb-4">
@@ -368,6 +368,70 @@ export default function DriverDashboard() {
                                                                     transition={{ duration: 0.5 }}
                                                                 />
                                                             </div>
+
+                                                            {/* ETA Timeline - Same as customer view */}
+                                                            {trip.stops && trip.stops.length > 0 && (() => {
+                                                                const now = currentTime;
+                                                                let currentStopIndex = 0;
+                                                                for (let i = 0; i < trip.stops.length; i++) {
+                                                                    const stopTime = parseTimeToDate(trip.stops[i].arrival_time);
+                                                                    if (now < stopTime) {
+                                                                        currentStopIndex = i;
+                                                                        break;
+                                                                    }
+                                                                    currentStopIndex = i + 1;
+                                                                }
+
+                                                                const prevStop = currentStopIndex > 0 ? trip.stops[currentStopIndex - 1] : null;
+                                                                const nextStop = trip.stops[currentStopIndex] || trip.stops[trip.stops.length - 1];
+                                                                const destStop = trip.stops[trip.stops.length - 1];
+
+                                                                const getEtaMins = (stop: TripStop) => {
+                                                                    const stopTime = parseTimeToDate(stop.arrival_time);
+                                                                    const diffMs = stopTime.getTime() - now.getTime();
+                                                                    const mins = Math.round(diffMs / (1000 * 60));
+                                                                    return mins > 0 ? `${mins} min` : "Arriving";
+                                                                };
+
+                                                                return (
+                                                                    <div className="mt-4 p-4 bg-white rounded-xl border border-gray-100">
+                                                                        <div className="flex items-center justify-between mb-3">
+                                                                            <div className="flex items-center gap-2 text-brand-slate">
+                                                                                <Clock className="w-4 h-4 text-brand-green" />
+                                                                                <span className="font-bold">Arriving in {getEtaMins(nextStop)}</span>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {/* Timeline */}
+                                                                        <div className="space-y-4 relative pl-4 border-l-2 border-dashed border-gray-200 ml-2">
+                                                                            {/* Previous Stop */}
+                                                                            {prevStop && (
+                                                                                <div className="relative">
+                                                                                    <div className="absolute -left-[21px] top-1 w-3 h-3 bg-gray-300 rounded-full border-2 border-white ring-1 ring-gray-200"></div>
+                                                                                    <p className="text-sm text-brand-grey">{prevStop.name}</p>
+                                                                                    <p className="text-xs text-gray-400">Departed {formatTime(prevStop.arrival_time)}</p>
+                                                                                </div>
+                                                                            )}
+
+                                                                            {/* Next Stop (Current) */}
+                                                                            <div className="relative">
+                                                                                <div className="absolute -left-[23px] top-0 w-4 h-4 bg-brand-green rounded-full border-2 border-white ring-2 ring-brand-green/30 animate-pulse"></div>
+                                                                                <p className="font-bold text-brand-slate">{nextStop.name}</p>
+                                                                                <p className="text-xs text-brand-green">ETA {getEtaMins(nextStop)}</p>
+                                                                            </div>
+
+                                                                            {/* Destination */}
+                                                                            {destStop && destStop.id !== nextStop.id && (
+                                                                                <div className="relative">
+                                                                                    <div className="absolute -left-[21px] top-1 w-3 h-3 bg-gray-300 rounded-full border-2 border-white ring-1 ring-gray-200"></div>
+                                                                                    <p className="text-sm text-brand-grey">{destStop.name}</p>
+                                                                                    <p className="text-xs text-gray-400">{formatTime(destStop.arrival_time)}</p>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })()}
                                                         </div>
                                                     )}
                                                 </CardContent>
