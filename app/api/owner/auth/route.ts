@@ -42,12 +42,36 @@ export async function POST(request: NextRequest) {
 
         console.log('[API] Auth success:', data.user.id);
 
+        // Verify user is an owner
+        const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', data.user.id)
+            .single();
+
+        if (profileError) {
+            console.error('[API] Profile fetch error:', profileError.message);
+        }
+
+        const role = profileData?.role || 'unknown';
+
+        if (role !== 'owner') {
+            console.log('[API] User is not an owner, role:', role);
+            return NextResponse.json(
+                { error: 'This login is for fleet owners only' },
+                { status: 403 }
+            );
+        }
+
+        console.log('[API] Owner verified, returning session');
+
         // Return session data for client to use
         return NextResponse.json({
             user: {
                 id: data.user.id,
                 email: data.user.email,
             },
+            role: role,
             session: data.session ? {
                 access_token: data.session.access_token,
                 refresh_token: data.session.refresh_token,
@@ -63,3 +87,4 @@ export async function POST(request: NextRequest) {
         );
     }
 }
+

@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Navigation, QrCode, User } from "lucide-react";
 
 export default function DriverLayout({
@@ -6,24 +9,50 @@ export default function DriverLayout({
 }: {
     children: React.ReactNode;
 }) {
+    const pathname = usePathname();
+
+    const navItems = [
+        { href: "/driver", icon: Navigation, label: "Trip" },
+        { href: "/driver/validate", icon: QrCode, label: "Validate" },
+        { href: "/driver/profile", icon: User, label: "Profile" },
+    ];
+
+    const isActive = (href: string) => {
+        if (href === "/driver") {
+            return pathname === "/driver";
+        }
+        return pathname?.startsWith(href);
+    };
+
     return (
         <div className="min-h-screen bg-brand-cloud pb-20">
             {children}
 
             {/* Bottom Navigation */}
-            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around items-center h-16 z-50">
-                <Link href="/driver" className="flex flex-col items-center justify-center w-full h-full text-brand-grey hover:text-brand-blue focus:text-brand-blue active:text-brand-blue">
-                    <Navigation className="w-6 h-6 mb-1" />
-                    <span className="text-[10px] font-medium">Trip</span>
-                </Link>
-                <Link href="/driver/validate" className="flex flex-col items-center justify-center w-full h-full text-brand-grey hover:text-brand-blue focus:text-brand-blue active:text-brand-blue">
-                    <QrCode className="w-6 h-6 mb-1" />
-                    <span className="text-[10px] font-medium">Validate</span>
-                </Link>
-                <Link href="/driver/profile" className="flex flex-col items-center justify-center w-full h-full text-brand-grey hover:text-brand-blue focus:text-brand-blue active:text-brand-blue">
-                    <User className="w-6 h-6 mb-1" />
-                    <span className="text-[10px] font-medium">Profile</span>
-                </Link>
+            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around items-center h-16 z-50 shadow-lg">
+                {navItems.map((item) => {
+                    const active = isActive(item.href);
+                    return (
+                        <Link
+                            key={item.href}
+                            href={item.href}
+                            className={`flex flex-col items-center justify-center w-full h-full transition-all duration-200 ${active
+                                    ? "text-brand-blue"
+                                    : "text-brand-grey hover:text-brand-blue"
+                                }`}
+                        >
+                            <div className={`relative ${active ? "scale-110" : ""} transition-transform`}>
+                                <item.icon className={`w-6 h-6 mb-1 ${active ? "stroke-[2.5px]" : ""}`} />
+                                {active && (
+                                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-brand-blue rounded-full"></div>
+                                )}
+                            </div>
+                            <span className={`text-[10px] font-medium ${active ? "font-bold" : ""}`}>
+                                {item.label}
+                            </span>
+                        </Link>
+                    );
+                })}
             </div>
         </div>
     );

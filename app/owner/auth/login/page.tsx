@@ -29,67 +29,68 @@ export default function OwnerLoginPage() {
         }
 
         try {
-            console.log('Attempting login for:', email.trim());
-            console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? 'configured' : 'MISSING');
+            console.log('Attempting login via API for:', email.trim());
 
-            // Helper function to attempt login with timeout and retries
-            const attemptLogin = async (attempt: number): Promise<any> => {
-                console.log(`Login attempt ${attempt}...`);
+            // Use API route for more reliable server-side auth
+            const response = await fetch('/api/owner/auth', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email.trim(), password }),
+            });
 
-                const authPromise = supabase.auth.signInWithPassword({
-                    email: email.trim(),
-                    password,
-                });
+            const result = await response.json();
 
-                const timeoutPromise = new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error('timeout')), 30000)
-                );
-
-                try {
-                    return await Promise.race([authPromise, timeoutPromise]);
-                } catch (err: any) {
-                    if (err.message === 'timeout' && attempt < 2) {
-                        console.log('Timeout, retrying...');
-                        return attemptLogin(attempt + 1);
-                    }
-                    throw new Error('Login timeout - please try again or check your internet connection');
-                }
-            };
-
-            // Use direct Supabase auth on client (this properly stores session)
-            const { data, error: authError } = await attemptLogin(1);
-
-            if (authError) {
-                console.error('Auth error:', authError.message);
-                setError(authError.message);
+            if (!response.ok) {
+                console.error('API auth error:', result.error);
+                setError(result.error || 'Login failed');
                 setIsLoading(false);
                 return;
             }
 
-            if (!data.user) {
-                setError('Login failed - no user returned');
-                setIsLoading(false);
-                return;
-            }
+            console.log('API auth success, user:', result.user.id);
 
-            console.log('Auth success, user:', data.user.id);
-
-            // Verify user is an owner
-            const { data: profileData } = await supabase
-                .from('profiles')
-                .select('role')
-                .eq('id', data.user.id)
-                .single();
-
-            if (profileData?.role !== 'owner') {
-                await supabase.auth.signOut();
+            // Check role from API response or database
+            if (result.role && result.role !== 'owner') {
                 setError('This login is for fleet owners only');
                 setIsLoading(false);
                 return;
             }
 
-            console.log('Owner verified, redirecting to dashboard...');
-            // Use window.location for reliable redirect
+            // Try to set session with timeout - don't block if it hangs
+            if (result.session) {
+                console.log('Setting session...');
+                try {
+                    const setSessionPromise = supabase.auth.setSession({
+                        access_token: result.session.access_token,
+                        refresh_token: result.session.refresh_token,
+                    });
+
+                    const timeoutPromise = new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('setSession timeout')), 5000)
+                    );
+
+                    await Promise.race([setSessionPromise, timeoutPromise]);
+                    console.log('Session set successfully');
+                } catch (sessionErr: any) {
+                    // If setSession times out or fails, manually store in localStorage
+                    // This is a fallback to ensure login works
+                    console.warn('setSession failed/timed out, storing manually:', sessionErr.message);
+
+                    // Store session data manually for the Supabase client to pick up
+                    const storageKey = `sb-${new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname.split('.')[0]}-auth-token`;
+                    const sessionData = {
+                        access_token: result.session.access_token,
+                        refresh_token: result.session.refresh_token,
+                        expires_at: result.session.expires_at,
+                        expires_in: 3600,
+                        token_type: 'bearer',
+                        user: result.user,
+                    };
+                    localStorage.setItem(storageKey, JSON.stringify(sessionData));
+                }
+            }
+
+            console.log('Login successful, redirecting to dashboard...');
             window.location.href = "/owner";
 
         } catch (err: any) {

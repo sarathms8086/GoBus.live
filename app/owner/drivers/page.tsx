@@ -7,9 +7,8 @@ import { ArrowLeft, Users, Plus, Minus, Edit2, Check, X, Eye, EyeOff, Wrench, Tr
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion, AnimatePresence } from "framer-motion";
-import { supabase, DriverProfile } from "@/lib/supabase";
-import { driverApi, decodePassword } from "@/lib/api/drivers";
-import { busApi } from "@/lib/api/buses";
+import { DriverProfile } from "@/lib/supabase";
+import { decodePassword } from "@/lib/api/drivers";
 
 interface DriverWithBus extends DriverProfile {
     bus?: {
@@ -39,29 +38,59 @@ export default function DriversPage() {
     const [editBusId, setEditBusId] = useState<string>("");
     const [editRemarks, setEditRemarks] = useState("");
     const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
-    const [ownerId, setOwnerId] = useState<string>("");
+    const [accessToken, setAccessToken] = useState<string>("");
+
+    // Get access token from localStorage
+    const getAccessToken = (): string | null => {
+        try {
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+            if (supabaseUrl) {
+                const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
+                const storageKey = `sb-${projectRef}-auth-token`;
+                const storedSession = localStorage.getItem(storageKey);
+                if (storedSession) {
+                    const sessionData = JSON.parse(storedSession);
+                    return sessionData.access_token || null;
+                }
+            }
+        } catch (e) {
+            console.error('Error getting access token:', e);
+        }
+        return null;
+    };
 
     useEffect(() => {
         loadData();
     }, [router]);
 
     const loadData = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) {
+        const token = getAccessToken();
+        if (!token) {
             router.push("/owner/auth/login");
             return;
         }
 
-        setOwnerId(session.user.id);
+        setAccessToken(token);
 
         try {
-            const [ownerDrivers, ownerBuses] = await Promise.all([
-                driverApi.getByOwner(session.user.id),
-                busApi.getByOwner(session.user.id),
-            ]);
-            setDrivers(ownerDrivers);
-            setAllBuses(ownerBuses);
-            setIsFirstTime(ownerDrivers.length === 0);
+            const response = await fetch('/api/owner/drivers', {
+                headers: { 'Authorization': `Bearer ${token}` },
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                console.error('Drivers API error:', result.error);
+                if (response.status === 401) {
+                    router.push("/owner/auth/login");
+                    return;
+                }
+                return;
+            }
+
+            setDrivers(result.drivers || []);
+            setAllBuses(result.buses || []);
+            setIsFirstTime((result.drivers || []).length === 0);
         } catch (error) {
             console.error("Error loading data:", error);
         } finally {
@@ -78,8 +107,22 @@ export default function DriversPage() {
 
         setIsCreating(true);
         try {
-            const result = await driverApi.bulkCreate(ownerId, count);
-            setNewCredentials(result.credentials);
+            const response = await fetch('/api/owner/drivers', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ count }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to create drivers');
+            }
+
+            setNewCredentials(result.credentials || []);
             await loadData();
             setIsFirstTime(false);
         } catch (error: any) {
@@ -93,12 +136,24 @@ export default function DriversPage() {
     const handleAddDriver = async () => {
         setIsCreating(true);
         try {
-            const result = await driverApi.createOne(ownerId);
-            setNewCredentials([{
-                slotName: result.driver.slot_name,
-                username: result.username,
-                password: result.password
-            }]);
+            const response = await fetch('/api/owner/drivers', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ count: 1 }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to add driver');
+            }
+
+            if (result.credentials && result.credentials.length > 0) {
+                setNewCredentials([result.credentials[0]]);
+            }
             await loadData();
         } catch (error: any) {
             console.error("Error adding driver:", error);
@@ -113,7 +168,10 @@ export default function DriversPage() {
         if (!confirm("Remove the last driver? This cannot be undone.")) return;
 
         try {
-            await driverApi.deleteLastDriver(ownerId);
+            await fetch(`/api/owner/drivers?last=true`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${accessToken}` },
+            });
             setNewCredentials([]);
             await loadData();
         } catch (error: any) {
@@ -125,8 +183,10 @@ export default function DriversPage() {
         if (!confirm(`Delete ${driver.slot_name}? This cannot be undone.`)) return;
 
         try {
-            await driverApi.delete(driver.id);
-            // Remove any stored credentials for this driver
+            await fetch(`/api/owner/drivers?id=${driver.id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${accessToken}` },
+            });
             setNewCredentials(prev => prev.filter(c => c.username !== driver.username));
             await loadData();
         } catch (error: any) {
@@ -143,10 +203,25 @@ export default function DriversPage() {
 
     const handleSave = async (driverId: string) => {
         try {
-            await driverApi.update(driverId, {
-                bus_id: editBusId || null,
-                remarks: editRemarks || null,
+            const response = await fetch('/api/owner/drivers', {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    driverId,
+                    bus_id: editBusId || null,
+                    remarks: editRemarks || null,
+                }),
             });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to save');
+            }
+
             await loadData();
             setEditingId(null);
         } catch (error: any) {
@@ -184,25 +259,9 @@ export default function DriversPage() {
         return !driver.username?.startsWith('D');
     };
 
-    // Fix driver's login ID to new format
+    // Fix driver's login ID to new format - disabled pending API implementation
     const handleFixLoginId = async (driver: DriverWithBus) => {
-        if (!confirm(`Update login credentials for ${driver.slot_name} to the new format? The old login ID (${driver.username}) will no longer work.`)) {
-            return;
-        }
-
-        try {
-            const result = await driverApi.fixLoginId(driver.id);
-            // Add to newCredentials to show the new password
-            setNewCredentials(prev => [...prev, {
-                slotName: driver.slot_name,
-                username: result.username,
-                password: result.password
-            }]);
-            await loadData();
-        } catch (error: any) {
-            console.error("Error fixing login ID:", error);
-            alert("Failed to fix login ID: " + (error.message || "Unknown error"));
-        }
+        alert("This feature is temporarily unavailable. Please contact support.");
     };
 
     // Get available buses for dropdown (unassigned + current driver's bus)
@@ -385,7 +444,7 @@ export default function DriversPage() {
                                             <th className="text-left p-4 text-xs font-bold text-brand-grey uppercase">Login ID</th>
                                             <th className="text-left p-4 text-xs font-bold text-brand-grey uppercase">Password</th>
                                             <th className="text-left p-4 text-xs font-bold text-brand-grey uppercase">Assigned Bus</th>
-                                            <th className="text-left p-4 text-xs font-bold text-brand-grey uppercase">Remarks</th>
+                                            <th className="text-left p-4 text-xs font-bold text-brand-grey uppercase">Name of Driver</th>
                                             <th className="text-right p-4 text-xs font-bold text-brand-grey uppercase w-20">Edit</th>
                                         </tr>
                                     </thead>
@@ -443,7 +502,7 @@ export default function DriversPage() {
                                                             type="text"
                                                             value={editRemarks}
                                                             onChange={(e) => setEditRemarks(e.target.value)}
-                                                            placeholder="Add note..."
+                                                            placeholder="Enter driver name..."
                                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-green"
                                                         />
                                                     ) : (

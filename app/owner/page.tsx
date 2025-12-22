@@ -23,138 +23,92 @@ export default function OwnerDashboard() {
             try {
                 console.log('Starting auth check...');
 
-                // Get current session with timeout
-                const getSessionWithTimeout = async () => {
-                    const timeoutPromise = new Promise<never>((_, reject) =>
-                        setTimeout(() => reject(new Error('Session check timeout')), 5000)
-                    );
-                    return Promise.race([
-                        supabase.auth.getSession(),
-                        timeoutPromise
-                    ]);
-                };
+                let userId: string | null = null;
+                let accessToken: string | null = null;
 
-                let session = null;
-                let sessionError = null;
+                // Try to get session from localStorage first (from our API login fallback)
+                try {
+                    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+                    if (supabaseUrl) {
+                        const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
+                        const storageKey = `sb-${projectRef}-auth-token`;
+                        const storedSession = localStorage.getItem(storageKey);
+
+                        if (storedSession) {
+                            const sessionData = JSON.parse(storedSession);
+                            if (sessionData.access_token && sessionData.user?.id) {
+                                console.log('Found session in localStorage');
+                                userId = sessionData.user.id;
+                                accessToken = sessionData.access_token;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.log('Could not read localStorage session:', e);
+                }
+
+                // If no localStorage session, try Supabase getSession with short timeout
+                if (!userId) {
+                    console.log('No localStorage session, trying Supabase getSession...');
+                    try {
+                        const timeoutPromise = new Promise<never>((_, reject) =>
+                            setTimeout(() => reject(new Error('Session check timeout')), 8000)
+                        );
+
+                        const result = await Promise.race([
+                            supabase.auth.getSession(),
+                            timeoutPromise
+                        ]);
+
+                        if (result.data?.session?.user) {
+                            userId = result.data.session.user.id;
+                            accessToken = result.data.session.access_token;
+                            console.log('Got session from Supabase');
+                        }
+                    } catch (err) {
+                        console.warn('Supabase getSession failed/timed out:', err);
+                    }
+                }
+
+                // If still no session, redirect to login
+                if (!userId) {
+                    console.log('No valid session found, redirecting to login');
+                    router.replace("/owner/auth/login");
+                    return;
+                }
+
+                console.log('Session found, user:', userId);
+
+                // Fetch owner data and buses using API route (more reliable for production)
+                console.log('Fetching dashboard data via API...');
 
                 try {
-                    const result = await getSessionWithTimeout();
-                    session = result.data?.session;
-                    sessionError = result.error;
-                } catch (timeoutErr) {
-                    console.warn('Session check timed out, redirecting to login');
-                    router.push("/owner/auth/login");
-                    return;
-                }
+                    const response = await fetch('/api/owner/dashboard', {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json',
+                        },
+                    });
 
-                if (sessionError) {
-                    console.error('Session error:', sessionError);
-                    setError('Failed to get session: ' + sessionError.message);
-                    setIsLoading(false);
-                    return;
-                }
+                    const result = await response.json();
 
-                if (!session?.user) {
-                    console.log('No session, redirecting to login');
-                    router.push("/owner/auth/login");
-                    return;
-                }
-
-                console.log('Session found, user:', session.user.id);
-
-                // Start concurrent fetches with timeout
-                const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Request timed out')), 15000)
-                );
-
-                const ownerPromise = supabase
-                    .from('owner_profiles')
-                    .select('*')
-                    .eq('id', session.user.id)
-                    .single();
-
-                const busesPromise = busApi.getByOwner(session.user.id);
-
-                console.log('Fetching owner and buses data...');
-
-                const [ownerResult, busesResult] = await Promise.race([
-                    Promise.allSettled([ownerPromise, busesPromise]),
-                    timeoutPromise.then(() => { throw new Error('Request timed out'); })
-                ]) as [PromiseSettledResult<any>, PromiseSettledResult<any>];
-
-                console.log('Data fetched, processing...');
-
-                // Handle Owner Profile
-                if (ownerResult.status === 'fulfilled') {
-                    const { data: ownerData, error: ownerError } = ownerResult.value;
-
-                    if (ownerError) {
-                        console.error('Owner profile error:', ownerError);
-
-                        // Check if table doesn't exist (migrations not run)
-                        if (ownerError.code === '42P01' || ownerError.message.includes('does not exist')) {
-                            setError('Database tables not found. Please run the migration SQL files in Supabase SQL Editor.');
-                            setIsLoading(false);
-                            return;
-                        }
-
-                        // Profile exists but not as owner - might need to create owner_profile
-                        if (ownerError.code === 'PGRST116') {
-                            // Try to create owner_profile if profile exists with owner role
-                            const { data: profile } = await supabase
-                                .from('profiles')
-                                .select('role, display_name')
-                                .eq('id', session.user.id)
-                                .single();
-
-                            if (profile?.role === 'owner') {
-                                // Create missing owner_profile
-                                const { data: newOwner, error: createError } = await supabase
-                                    .from('owner_profiles')
-                                    .insert({
-                                        id: session.user.id,
-                                        company_name: profile.display_name || 'My Company',
-                                        email: session.user.email,
-                                    })
-                                    .select()
-                                    .single();
-
-                                if (!createError && newOwner) {
-                                    setOwner(newOwner);
-                                } else {
-                                    setError('Failed to create owner profile. Check your database permissions.');
-                                    setIsLoading(false);
-                                    return;
-                                }
-                            } else {
-                                setError('No owner profile found. Please sign up as an owner first.');
-                                setIsLoading(false);
-                                return;
-                            }
-                        } else {
-                            setError('Failed to load owner profile: ' + ownerError.message);
-                            setIsLoading(false);
-                            return;
-                        }
-                    } else {
-                        setOwner(ownerData);
+                    if (!response.ok) {
+                        console.error('Dashboard API error:', result.error);
+                        setError(result.error || 'Failed to load dashboard data');
+                        setIsLoading(false);
+                        return;
                     }
-                } else {
-                    console.error('Owner fetch failed:', ownerResult.reason);
-                    setError('Failed to fetch owner data: ' + ownerResult.reason?.message);
+
+                    console.log('Dashboard data loaded successfully');
+                    setOwner(result.owner);
+                    setBuses(result.buses || []);
                     setIsLoading(false);
-                    return;
+                } catch (fetchErr: any) {
+                    console.error('Dashboard fetch error:', fetchErr);
+                    setError('Failed to load dashboard data: ' + fetchErr.message);
+                    setIsLoading(false);
                 }
-
-                // Handle Buses
-                if (busesResult.status === 'fulfilled') {
-                    setBuses(busesResult.value);
-                } else {
-                    console.error('Error fetching buses:', busesResult.reason);
-                }
-
-                console.log('Data loaded successfully');
-                setIsLoading(false);
             } catch (err: any) {
                 console.error('Dashboard error:', err);
                 setError('An unexpected error occurred: ' + err.message);
