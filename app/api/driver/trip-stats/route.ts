@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
 export async function GET(request: NextRequest) {
     try {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+        if (!supabaseUrl || !supabaseServiceKey) {
+            return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+        }
+
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
         const { searchParams } = new URL(request.url);
         const tripId = searchParams.get('tripId');
         const busId = searchParams.get('busId');
@@ -14,8 +20,6 @@ export async function GET(request: NextRequest) {
         if (!tripId && !busId) {
             return NextResponse.json({ error: 'tripId or busId is required' }, { status: 400 });
         }
-
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
         // Get tickets for this trip/bus validated today
         let ticketsQuery = supabase
