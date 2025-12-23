@@ -45,6 +45,7 @@ export default function DriverValidate() {
     const [currentTrip, setCurrentTrip] = useState<Trip | null>(null);
     const [tripStatus, setTripStatus] = useState<"live" | "upcoming" | "none">("none");
     const [nextStop, setNextStop] = useState<TripStop | null>(null);
+    const [previousStop, setPreviousStop] = useState<TripStop | null>(null);
 
     const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
 
@@ -173,12 +174,14 @@ export default function DriverValidate() {
         for (let i = 0; i < trip.stops.length; i++) {
             if (currentTime < parseTimeToDate(trip.stops[i].arrival_time)) {
                 setNextStop(trip.stops[i]);
+                setPreviousStop(i > 0 ? trip.stops[i - 1] : null);
                 const dropping = activeTickets.filter(t => t.to_stop === trip.stops[i].name).length;
                 setDroppingNext(dropping);
                 return;
             }
         }
         setNextStop(trip.stops[trip.stops.length - 1]);
+        setPreviousStop(trip.stops.length > 1 ? trip.stops[trip.stops.length - 2] : null);
     };
 
     const startCamera = async () => {
@@ -252,36 +255,66 @@ export default function DriverValidate() {
 
             {/* MIDDLE: Next Stop Box + Stats */}
             <div className="flex-1 p-4 space-y-4">
-                {/* Next Stop Box */}
-                {nextStop && (
-                    <Card className="border-0 shadow-lg bg-white">
-                        <CardContent className="p-4">
-                            <div className="flex items-center gap-2 text-brand-grey text-xs uppercase mb-2">
-                                <MapPin className="w-4 h-4" />
-                                <span>{tripStatus === "live" ? "Next Stop" : "First Stop"}</span>
+                {/* Stop Info Card - Always Visible */}
+                <Card className="border-0 shadow-lg bg-white">
+                    <CardContent className="p-5">
+                        {tripStatus === "none" ? (
+                            /* No trips scheduled */
+                            <div className="text-center py-4">
+                                <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                                    <MapPin className="w-7 h-7 text-gray-400" />
+                                </div>
+                                <h2 className="text-xl font-bold text-brand-slate mb-1">No Active Trip</h2>
+                                <p className="text-brand-grey text-sm">No trips scheduled for today</p>
                             </div>
-                            <h2 className="text-2xl font-bold text-brand-slate mb-4">{nextStop.name}</h2>
+                        ) : tripStatus === "upcoming" && nextStop ? (
+                            /* Trip upcoming - waiting to start */
+                            <>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <div className="w-3 h-3 bg-yellow-400 rounded-full animate-pulse"></div>
+                                    <span className="text-brand-grey text-xs uppercase tracking-wider">First Stop</span>
+                                </div>
+                                <h2 className="text-3xl font-bold text-brand-slate mb-3">{nextStop.name}</h2>
 
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="bg-gray-50 rounded-xl p-3">
-                                    <div className="flex items-center gap-1 text-brand-grey text-xs mb-1">
-                                        <Clock className="w-3 h-3" />
-                                        <span>Scheduled</span>
-                                    </div>
-                                    <p className="text-lg font-bold text-brand-slate">{formatTime(nextStop.arrival_time)}</p>
+                                <div className="flex items-center gap-2 bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3">
+                                    <Clock className="w-5 h-5 text-yellow-600" />
+                                    <span className="text-yellow-700 text-sm">Trip starts at</span>
+                                    <span className="text-xl font-bold text-yellow-600 ml-auto">{currentTrip ? formatTime(currentTrip.start_time) : ''}</span>
                                 </div>
-                                <div className="bg-blue-50 rounded-xl p-3">
-                                    <div className="flex items-center gap-1 text-brand-blue text-xs mb-1">
-                                        <Navigation className="w-3 h-3" />
-                                        <span>Expected</span>
-                                        {driverLocation && <span className="ml-1 text-green-500">📍</span>}
+                            </>
+                        ) : nextStop ? (
+                            /* Trip is live */
+                            <>
+                                {/* Previous Stop (small) */}
+                                {previousStop && (
+                                    <div className="flex items-center gap-2 text-brand-grey text-sm mb-3">
+                                        <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
+                                        <span>From: <span className="font-medium">{previousStop.name}</span></span>
                                     </div>
-                                    <p className="text-lg font-bold text-brand-blue">{calculateETA(nextStop)}</p>
+                                )}
+
+                                {/* Next Stop (big) */}
+                                <div className="flex items-center gap-2 mb-1">
+                                    <div className="w-3 h-3 bg-brand-green rounded-full animate-pulse"></div>
+                                    <span className="text-brand-grey text-xs uppercase tracking-wider">Next Stop</span>
                                 </div>
+                                <h2 className="text-3xl font-bold text-brand-slate mb-3">{nextStop.name}</h2>
+
+                                {/* Scheduled Time */}
+                                <div className="flex items-center gap-2 bg-brand-blue/10 rounded-xl px-4 py-3">
+                                    <Clock className="w-5 h-5 text-brand-blue" />
+                                    <span className="text-brand-grey text-sm">Arrival at</span>
+                                    <span className="text-xl font-bold text-brand-blue ml-auto">{formatTime(nextStop.arrival_time)}</span>
+                                </div>
+                            </>
+                        ) : (
+                            /* Fallback */
+                            <div className="text-center py-4">
+                                <p className="text-brand-grey">Loading trip info...</p>
                             </div>
-                        </CardContent>
-                    </Card>
-                )}
+                        )}
+                    </CardContent>
+                </Card>
 
                 {/* Stats Cards */}
                 <div className="grid grid-cols-3 gap-2">

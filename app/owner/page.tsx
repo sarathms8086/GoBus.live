@@ -131,8 +131,23 @@ export default function OwnerDashboard() {
     }, [router]);
 
     const handleLogout = async () => {
+        // Clear localStorage session (fallback from API login)
+        try {
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+            if (supabaseUrl) {
+                const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
+                const storageKey = `sb-${projectRef}-auth-token`;
+                localStorage.removeItem(storageKey);
+            }
+        } catch (e) {
+            console.log('Could not clear localStorage:', e);
+        }
+
+        // Also sign out from Supabase
         await supabase.auth.signOut();
-        router.push("/");
+
+        // Redirect to login
+        window.location.href = "/owner/auth/login";
     };
 
     const handleDeleteBus = async (busId: string) => {

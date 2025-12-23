@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, LogIn, Building2, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Building2, Eye, EyeOff, Bus, Shield, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
@@ -101,101 +101,204 @@ export default function OwnerLoginPage() {
     };
 
     return (
-        <main className="min-h-screen bg-brand-cloud flex flex-col">
-            <header className="p-6 flex items-center">
+        <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col relative overflow-hidden">
+            {/* Decorative Background Elements */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl -translate-y-48 translate-x-48" />
+                <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl translate-y-48 -translate-x-48" />
+                <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-purple-500/5 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
+            </div>
+
+            {/* Floating Icons */}
+            <motion.div
+                className="absolute top-20 right-10 text-white/10"
+                animate={{ y: [0, -10, 0], rotate: [0, 5, 0] }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            >
+                <Bus className="w-16 h-16" />
+            </motion.div>
+            <motion.div
+                className="absolute bottom-32 left-10 text-white/10"
+                animate={{ y: [0, 10, 0], rotate: [0, -5, 0] }}
+                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+            >
+                <BarChart3 className="w-12 h-12" />
+            </motion.div>
+            <motion.div
+                className="absolute top-1/3 left-16 text-white/5"
+                animate={{ y: [0, -15, 0] }}
+                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+            >
+                <Shield className="w-20 h-20" />
+            </motion.div>
+
+            {/* Header */}
+            <header className="p-6 flex items-center relative z-10">
                 <Link href="/">
-                    <Button variant="ghost" size="icon" className="mr-4">
-                        <ArrowLeft className="w-6 h-6 text-brand-slate" />
+                    <Button variant="ghost" size="icon" className="mr-4 text-white/80 hover:text-white hover:bg-white/10">
+                        <ArrowLeft className="w-6 h-6" />
                     </Button>
                 </Link>
-                <h1 className="text-2xl font-bold text-brand-slate">Owner Login</h1>
+                <h1 className="text-2xl font-bold text-white">Fleet Owner Portal</h1>
             </header>
 
-            <div className="flex-1 flex items-center justify-center px-6 pb-12">
+            <div className="flex-1 flex items-center justify-center px-6 pb-12 relative z-10">
                 <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
+                    initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
                     className="w-full max-w-md"
                 >
-                    <div className="bg-white rounded-3xl p-8 shadow-xl">
+                    {/* Glass Card */}
+                    <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 shadow-2xl border border-white/20">
                         <div className="text-center mb-8">
-                            <div className="w-16 h-16 bg-brand-slate/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <Building2 className="w-8 h-8 text-brand-slate" />
-                            </div>
-                            <h2 className="text-2xl font-bold text-brand-slate mb-2">
+                            <motion.div
+                                className="w-20 h-20 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-emerald-500/30"
+                                initial={{ scale: 0, rotate: -180 }}
+                                animate={{ scale: 1, rotate: 0 }}
+                                transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                            >
+                                <Building2 className="w-10 h-10 text-white" />
+                            </motion.div>
+                            <motion.h2
+                                className="text-3xl font-bold text-white mb-2"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.3 }}
+                            >
                                 Welcome Back!
-                            </h2>
-                            <p className="text-brand-grey">Manage your fleet</p>
+                            </motion.h2>
+                            <motion.p
+                                className="text-white/60"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.4 }}
+                            >
+                                Manage your fleet with ease
+                            </motion.p>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="space-y-6">
-                            <Input
-                                label="Email"
-                                type="email"
-                                placeholder="Enter your email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                error={error && !email ? "This field is required" : ""}
-                            />
-
-                            <div className="space-y-2">
-                                <Input
-                                    label="Password"
-                                    type={showPassword ? "text" : "password"}
-                                    placeholder="Enter your password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    error={error && !password ? "This field is required" : ""}
-                                    suffix={
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPassword(!showPassword)}
-                                            className="focus:outline-none hover:text-brand-slate transition-colors"
-                                        >
-                                            {showPassword ? (
-                                                <EyeOff className="w-5 h-5" />
-                                            ) : (
-                                                <Eye className="w-5 h-5" />
-                                            )}
-                                        </button>
-                                    }
+                        <form onSubmit={handleSubmit} className="space-y-5">
+                            <motion.div
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: 0.5 }}
+                            >
+                                <label className="block text-sm font-medium text-white/80 mb-2">Email</label>
+                                <input
+                                    type="email"
+                                    placeholder="Enter your email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/50 focus:border-emerald-400/50 transition-all"
                                 />
+                            </motion.div>
+
+                            <motion.div
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: 0.6 }}
+                                className="space-y-2"
+                            >
+                                <label className="block text-sm font-medium text-white/80 mb-2">Password</label>
+                                <div className="relative">
+                                    <input
+                                        type={showPassword ? "text" : "password"}
+                                        placeholder="Enter your password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full px-4 py-4 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/50 focus:border-emerald-400/50 transition-all pr-12"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white transition-colors"
+                                    >
+                                        {showPassword ? (
+                                            <EyeOff className="w-5 h-5" />
+                                        ) : (
+                                            <Eye className="w-5 h-5" />
+                                        )}
+                                    </button>
+                                </div>
                                 <div className="flex justify-end">
                                     <Link
                                         href="/owner/auth/forgot-password"
-                                        className="text-sm font-medium text-brand-green hover:underline"
+                                        className="text-sm font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
                                     >
                                         Forgot password?
                                     </Link>
                                 </div>
-                            </div>
+                            </motion.div>
 
                             {error && (
-                                <div className="bg-red-50 border border-red-200 rounded-xl p-3">
-                                    <p className="text-sm text-red-600 text-center">{error}</p>
-                                </div>
+                                <motion.div
+                                    className="bg-red-500/20 border border-red-500/30 rounded-xl p-3 backdrop-blur-sm"
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                >
+                                    <p className="text-sm text-red-300 text-center">{error}</p>
+                                </motion.div>
                             )}
 
-                            <Button
-                                type="submit"
-                                className="w-full py-6 text-lg bg-brand-slate hover:bg-gray-800 shadow-lg shadow-brand-slate/20"
-                                disabled={isLoading}
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.7 }}
                             >
-                                {isLoading ? "Logging in..." : "Login"}
-                            </Button>
+                                <Button
+                                    type="submit"
+                                    className="w-full py-6 text-lg bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-lg shadow-emerald-500/30 border-0 font-semibold transition-all duration-300 hover:shadow-emerald-500/50 hover:scale-[1.02]"
+                                    disabled={isLoading}
+                                >
+                                    {isLoading ? (
+                                        <span className="flex items-center justify-center gap-2">
+                                            <motion.div
+                                                className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+                                                animate={{ rotate: 360 }}
+                                                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                                            />
+                                            Logging in...
+                                        </span>
+                                    ) : (
+                                        "Login to Dashboard"
+                                    )}
+                                </Button>
+                            </motion.div>
                         </form>
 
-                        <div className="mt-8 pt-6 border-t border-gray-200 text-center">
-                            <p className="text-sm text-brand-grey mb-3">
-                                Don't have an account?
+                        <motion.div
+                            className="mt-8 pt-6 border-t border-white/10 text-center"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.8 }}
+                        >
+                            <p className="text-sm text-white/50 mb-4">
+                                New to GO BUS?
                             </p>
                             <Link href="/owner/auth/signup">
-                                <Button variant="outline" className="w-full">
+                                <Button
+                                    variant="outline"
+                                    className="w-full py-5 bg-transparent border-2 border-white/20 text-white hover:bg-white/10 hover:border-white/40 transition-all duration-300"
+                                >
                                     Register Your Company
                                 </Button>
                             </Link>
-                        </div>
+                        </motion.div>
                     </div>
+
+                    {/* Trust Indicators */}
+                    <motion.div
+                        className="mt-8 text-center"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 1 }}
+                    >
+                        <p className="text-white/30 text-sm flex items-center justify-center gap-2">
+                            <Shield className="w-4 h-4" />
+                            Secure & Encrypted Login
+                        </p>
+                    </motion.div>
                 </motion.div>
             </div>
         </main>
