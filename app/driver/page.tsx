@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
-import { Bus, User, Clock, MapPin, Navigation, Radio } from "lucide-react";
-import { motion } from "framer-motion";
+import { Bus, User, Clock, MapPin, Navigation, Radio, ChevronDown, ChevronUp, Ticket, CreditCard, Users } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const CURRENT_DRIVER_KEY = "go_bus_current_driver";
 
@@ -42,6 +42,25 @@ interface DriverInfo {
     phone: string | null;
 }
 
+interface DailyPassDetail {
+    id: string;
+    passNumber: string;
+    customerName: string;
+    validUntil: string;
+    validatedAt: string;
+}
+
+interface TripStats {
+    summary: {
+        totalTickets: number;
+        normalTickets: number;
+        normalPassengers: number;
+        dailyPassValidations: number;
+        totalRevenue: string;
+    };
+    dailyPassDetails: DailyPassDetail[];
+}
+
 export default function DriverDashboard() {
     const router = useRouter();
     const [driver, setDriver] = useState<DriverInfo | null>(null);
@@ -50,6 +69,9 @@ export default function DriverDashboard() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [currentTime, setCurrentTime] = useState(new Date());
+    const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
+    const [tripStats, setTripStats] = useState<{ [key: string]: TripStats }>({});
+    const [loadingStats, setLoadingStats] = useState<string | null>(null);
 
     useEffect(() => {
         loadDashboardData();
@@ -162,6 +184,39 @@ export default function DriverDashboard() {
         const ampm = h >= 12 ? 'PM' : 'AM';
         const displayHour = h % 12 || 12;
         return `${displayHour}:${minutes} ${ampm}`;
+    };
+
+    const loadTripStats = async (tripId: string) => {
+        if (tripStats[tripId]) return; // Already loaded
+
+        setLoadingStats(tripId);
+        try {
+            const response = await fetch(`/api/driver/trip-stats?tripId=${tripId}`);
+            const result = await response.json();
+
+            if (response.ok) {
+                setTripStats(prev => ({ ...prev, [tripId]: result }));
+            }
+        } catch (err) {
+            console.error('Error loading trip stats:', err);
+        } finally {
+            setLoadingStats(null);
+        }
+    };
+
+    const handleTripClick = (tripId: string) => {
+        if (expandedTripId === tripId) {
+            setExpandedTripId(null);
+        } else {
+            setExpandedTripId(tripId);
+            loadTripStats(tripId);
+        }
+    };
+
+    const formatDate = (dateStr: string) => {
+        if (!dateStr) return '';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     };
 
     if (isLoading) {
@@ -291,12 +346,15 @@ export default function DriverDashboard() {
                                             animate={{ opacity: 1, x: 0 }}
                                             transition={{ delay: 0.1 * index }}
                                         >
-                                            <Card className={`overflow-hidden shadow-md transition-all duration-300 ${tripStatus.status === 'live'
-                                                ? 'border-2 border-brand-green bg-green-50 ring-2 ring-green-200'
-                                                : tripStatus.status === 'upcoming'
-                                                    ? 'border border-gray-200 bg-white hover:shadow-lg'
-                                                    : 'border border-gray-100 bg-gray-50 opacity-60'
-                                                }`}>
+                                            <Card
+                                                className={`overflow-hidden shadow-md transition-all duration-300 cursor-pointer ${tripStatus.status === 'live'
+                                                    ? 'border-2 border-brand-green bg-green-50 ring-2 ring-green-200'
+                                                    : tripStatus.status === 'upcoming'
+                                                        ? 'border border-gray-200 bg-white hover:shadow-lg'
+                                                        : 'border border-gray-100 bg-gray-50 opacity-80'
+                                                    }`}
+                                                onClick={() => handleTripClick(trip.id)}
+                                            >
                                                 <CardContent className="p-5">
                                                     <div className="flex items-start justify-between mb-4">
                                                         <div>
@@ -316,18 +374,25 @@ export default function DriverDashboard() {
                                                             </p>
                                                         </div>
 
-                                                        {/* Status Indicator */}
-                                                        <div className="text-right">
-                                                            {tripStatus.status === 'upcoming' && tripStatus.timeLeft && (
-                                                                <div className="bg-brand-blue/10 rounded-xl px-4 py-2">
-                                                                    <p className="text-brand-blue text-xs">Starts in</p>
-                                                                    <p className="text-2xl font-bold text-brand-blue font-mono">
-                                                                        {tripStatus.timeLeft}
-                                                                    </p>
-                                                                </div>
-                                                            )}
-                                                            {tripStatus.status === 'completed' && (
-                                                                <span className="text-gray-400 text-sm">Completed</span>
+                                                        {/* Status Indicator + Expand Icon */}
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="text-right">
+                                                                {tripStatus.status === 'upcoming' && tripStatus.timeLeft && (
+                                                                    <div className="bg-brand-blue/10 rounded-xl px-4 py-2">
+                                                                        <p className="text-brand-blue text-xs">Starts in</p>
+                                                                        <p className="text-2xl font-bold text-brand-blue font-mono">
+                                                                            {tripStatus.timeLeft}
+                                                                        </p>
+                                                                    </div>
+                                                                )}
+                                                                {tripStatus.status === 'completed' && (
+                                                                    <span className="text-gray-400 text-sm">Completed</span>
+                                                                )}
+                                                            </div>
+                                                            {expandedTripId === trip.id ? (
+                                                                <ChevronUp className="w-5 h-5 text-brand-grey" />
+                                                            ) : (
+                                                                <ChevronDown className="w-5 h-5 text-brand-grey" />
                                                             )}
                                                         </div>
                                                     </div>
@@ -353,87 +418,96 @@ export default function DriverDashboard() {
                                                         </div>
                                                     </div>
 
-                                                    {/* Progress Bar for Live Trips */}
-                                                    {tripStatus.status === 'live' && tripStatus.progress !== undefined && (
-                                                        <div className="mt-4">
-                                                            <div className="flex justify-between text-xs text-brand-grey mb-1">
-                                                                <span>Progress</span>
-                                                                <span>{tripStatus.progress}%</span>
-                                                            </div>
-                                                            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                                                                <motion.div
-                                                                    className="h-full bg-brand-green rounded-full"
-                                                                    initial={{ width: 0 }}
-                                                                    animate={{ width: `${tripStatus.progress}%` }}
-                                                                    transition={{ duration: 0.5 }}
-                                                                />
-                                                            </div>
-
-                                                            {/* ETA Timeline - Same as customer view */}
-                                                            {trip.stops && trip.stops.length > 0 && (() => {
-                                                                const now = currentTime;
-                                                                let currentStopIndex = 0;
-                                                                for (let i = 0; i < trip.stops.length; i++) {
-                                                                    const stopTime = parseTimeToDate(trip.stops[i].arrival_time);
-                                                                    if (now < stopTime) {
-                                                                        currentStopIndex = i;
-                                                                        break;
-                                                                    }
-                                                                    currentStopIndex = i + 1;
-                                                                }
-
-                                                                const prevStop = currentStopIndex > 0 ? trip.stops[currentStopIndex - 1] : null;
-                                                                const nextStop = trip.stops[currentStopIndex] || trip.stops[trip.stops.length - 1];
-                                                                const destStop = trip.stops[trip.stops.length - 1];
-
-                                                                const getEtaMins = (stop: TripStop) => {
-                                                                    const stopTime = parseTimeToDate(stop.arrival_time);
-                                                                    const diffMs = stopTime.getTime() - now.getTime();
-                                                                    const mins = Math.round(diffMs / (1000 * 60));
-                                                                    return mins > 0 ? `${mins} min` : "Arriving";
-                                                                };
-
-                                                                return (
-                                                                    <div className="mt-4 p-4 bg-white rounded-xl border border-gray-100">
-                                                                        <div className="flex items-center justify-between mb-3">
-                                                                            <div className="flex items-center gap-2 text-brand-slate">
-                                                                                <Clock className="w-4 h-4 text-brand-green" />
-                                                                                <span className="font-bold">Arriving in {getEtaMins(nextStop)}</span>
-                                                                            </div>
+                                                    {/* Expanded Ticket Stats Section */}
+                                                    <AnimatePresence>
+                                                        {expandedTripId === trip.id && (
+                                                            <motion.div
+                                                                initial={{ height: 0, opacity: 0 }}
+                                                                animate={{ height: 'auto', opacity: 1 }}
+                                                                exit={{ height: 0, opacity: 0 }}
+                                                                transition={{ duration: 0.3 }}
+                                                                className="overflow-hidden"
+                                                            >
+                                                                <div className="mt-4 pt-4 border-t border-gray-200">
+                                                                    {loadingStats === trip.id ? (
+                                                                        <div className="text-center py-4">
+                                                                            <div className="w-6 h-6 border-2 border-brand-blue border-t-transparent rounded-full animate-spin mx-auto"></div>
+                                                                            <p className="text-brand-grey text-sm mt-2">Loading stats...</p>
                                                                         </div>
+                                                                    ) : tripStats[trip.id] ? (
+                                                                        <div className="space-y-4">
+                                                                            {/* Stats Summary */}
+                                                                            <div className="grid grid-cols-3 gap-2">
+                                                                                <div className="bg-brand-blue/10 rounded-xl p-3 text-center">
+                                                                                    <Ticket className="w-5 h-5 text-brand-blue mx-auto mb-1" />
+                                                                                    <p className="text-2xl font-bold text-brand-slate">
+                                                                                        {tripStats[trip.id].summary.normalTickets}
+                                                                                    </p>
+                                                                                    <p className="text-[10px] text-brand-grey">Normal</p>
+                                                                                </div>
+                                                                                <div className="bg-purple-100 rounded-xl p-3 text-center">
+                                                                                    <CreditCard className="w-5 h-5 text-purple-600 mx-auto mb-1" />
+                                                                                    <p className="text-2xl font-bold text-brand-slate">
+                                                                                        {tripStats[trip.id].summary.dailyPassValidations}
+                                                                                    </p>
+                                                                                    <p className="text-[10px] text-brand-grey">Daily Pass</p>
+                                                                                </div>
+                                                                                <div className="bg-brand-green/10 rounded-xl p-3 text-center">
+                                                                                    <Users className="w-5 h-5 text-brand-green mx-auto mb-1" />
+                                                                                    <p className="text-2xl font-bold text-brand-slate">
+                                                                                        {tripStats[trip.id].summary.totalTickets}
+                                                                                    </p>
+                                                                                    <p className="text-[10px] text-brand-grey">Total</p>
+                                                                                </div>
+                                                                            </div>
 
-                                                                        {/* Timeline */}
-                                                                        <div className="space-y-4 relative pl-4 border-l-2 border-dashed border-gray-200 ml-2">
-                                                                            {/* Previous Stop */}
-                                                                            {prevStop && (
-                                                                                <div className="relative">
-                                                                                    <div className="absolute -left-[21px] top-1 w-3 h-3 bg-gray-300 rounded-full border-2 border-white ring-1 ring-gray-200"></div>
-                                                                                    <p className="text-sm text-brand-grey">{prevStop.name}</p>
-                                                                                    <p className="text-xs text-gray-400">Departed {formatTime(prevStop.arrival_time)}</p>
+                                                                            {/* Daily Pass Details */}
+                                                                            {tripStats[trip.id].dailyPassDetails.length > 0 && (
+                                                                                <div>
+                                                                                    <h4 className="text-sm font-bold text-brand-slate mb-2 flex items-center gap-2">
+                                                                                        <CreditCard className="w-4 h-4 text-purple-600" />
+                                                                                        Daily Pass Validations
+                                                                                    </h4>
+                                                                                    <div className="space-y-2">
+                                                                                        {tripStats[trip.id].dailyPassDetails.map((pass) => (
+                                                                                            <div key={pass.id} className="bg-purple-50 rounded-lg p-3 border border-purple-100">
+                                                                                                <div className="flex justify-between items-start">
+                                                                                                    <div>
+                                                                                                        <p className="font-semibold text-brand-slate">{pass.customerName}</p>
+                                                                                                        <p className="text-xs text-brand-grey">ID: {pass.passNumber}</p>
+                                                                                                    </div>
+                                                                                                    <div className="text-right">
+                                                                                                        <p className="text-xs text-purple-600 font-medium">Valid till</p>
+                                                                                                        <p className="text-sm font-bold text-purple-700">{formatDate(pass.validUntil)}</p>
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
                                                                                 </div>
                                                                             )}
 
-                                                                            {/* Next Stop (Current) */}
-                                                                            <div className="relative">
-                                                                                <div className="absolute -left-[23px] top-0 w-4 h-4 bg-brand-green rounded-full border-2 border-white ring-2 ring-brand-green/30 animate-pulse"></div>
-                                                                                <p className="font-bold text-brand-slate">{nextStop.name}</p>
-                                                                                <p className="text-xs text-brand-green">ETA {getEtaMins(nextStop)}</p>
-                                                                            </div>
-
-                                                                            {/* Destination */}
-                                                                            {destStop && destStop.id !== nextStop.id && (
-                                                                                <div className="relative">
-                                                                                    <div className="absolute -left-[21px] top-1 w-3 h-3 bg-gray-300 rounded-full border-2 border-white ring-1 ring-gray-200"></div>
-                                                                                    <p className="text-sm text-brand-grey">{destStop.name}</p>
-                                                                                    <p className="text-xs text-gray-400">{formatTime(destStop.arrival_time)}</p>
+                                                                            {tripStats[trip.id].summary.totalTickets === 0 && (
+                                                                                <div className="text-center py-4 bg-gray-50 rounded-xl">
+                                                                                    <Ticket className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                                                                                    <p className="text-brand-grey text-sm">
+                                                                                        {tripStatus.status === 'completed'
+                                                                                            ? 'No tickets validated for this trip'
+                                                                                            : 'No tickets validated yet'
+                                                                                        }
+                                                                                    </p>
                                                                                 </div>
                                                                             )}
                                                                         </div>
-                                                                    </div>
-                                                                );
-                                                            })()}
-                                                        </div>
-                                                    )}
+                                                                    ) : (
+                                                                        <div className="text-center py-4">
+                                                                            <p className="text-brand-grey text-sm">Unable to load stats</p>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
                                                 </CardContent>
                                             </Card>
                                         </motion.div>
