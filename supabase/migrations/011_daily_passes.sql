@@ -13,7 +13,7 @@ ADD COLUMN IF NOT EXISTS validated_at TIMESTAMPTZ;
 
 -- Add validated_by to track which driver validated
 ALTER TABLE public.tickets 
-ADD COLUMN IF NOT EXISTS validated_by UUID REFERENCES public.driver_slots(id) ON DELETE SET NULL;
+ADD COLUMN IF NOT EXISTS validated_by UUID REFERENCES public.driver_profiles(id) ON DELETE SET NULL;
 
 -- ============================================
 -- DAILY PASSES TABLE
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS public.daily_pass_validations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     daily_pass_id UUID NOT NULL REFERENCES public.daily_passes(id) ON DELETE CASCADE,
     trip_id UUID REFERENCES public.trips(id) ON DELETE SET NULL,
-    validated_by UUID REFERENCES public.driver_slots(id) ON DELETE SET NULL,
+    validated_by UUID REFERENCES public.driver_profiles(id) ON DELETE SET NULL,
     validated_at TIMESTAMPTZ DEFAULT NOW()
 );
 

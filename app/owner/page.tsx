@@ -201,24 +201,40 @@ export default function OwnerDashboard() {
     return (
         <main className="min-h-screen bg-brand-cloud pb-20">
             {/* Header */}
-            <header className="bg-white shadow-sm p-6">
-                <div className="flex justify-between items-center">
-                    <div>
-                        <h1 className="text-2xl font-bold text-brand-slate">{owner?.company_name}</h1>
-                        <p className="text-sm text-brand-grey mt-1">Fleet Management</p>
-                    </div>
-                    <div className="flex gap-2">
-                        <Link href="/owner/settings/financial">
-                            <Button variant="ghost" size="icon" className="hover:bg-green-50">
-                                <CreditCard className="w-5 h-5 text-brand-slate" />
-                            </Button>
-                        </Link>
-                        <Button variant="ghost" size="icon" onClick={handleLogout}>
-                            <LogOut className="w-5 h-5 text-brand-grey" />
-                        </Button>
-                    </div>
+            <div className="bg-brand-blue px-6 py-8 relative overflow-hidden">
+                <div className="absolute inset-0 opacity-10">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-white rounded-full -translate-y-32 translate-x-32"></div>
+                    <div className="absolute bottom-0 left-0 w-48 h-48 bg-white rounded-full translate-y-24 -translate-x-24"></div>
                 </div>
-            </header>
+                <div className="relative">
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                    >
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <p className="text-blue-100 text-sm mb-1">Welcome back,</p>
+                                <h1 className="text-2xl font-bold text-white mb-2">{owner?.company_name}</h1>
+                                <div className="flex items-center gap-2">
+                                    <span className="bg-white/20 text-white px-3 py-1 rounded-full text-sm font-medium">
+                                        Fleet Management
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="flex gap-2">
+                                <Link href="/owner/settings/financial">
+                                    <Button variant="ghost" size="icon" className="text-white hover:bg-white/20">
+                                        <CreditCard className="w-5 h-5" />
+                                    </Button>
+                                </Link>
+                                <Button variant="ghost" size="icon" onClick={handleLogout} className="text-white hover:bg-white/20">
+                                    <LogOut className="w-5 h-5" />
+                                </Button>
+                            </div>
+                        </div>
+                    </motion.div>
+                </div>
+            </div>
 
             {/* Stats */}
             <div className="p-6">
