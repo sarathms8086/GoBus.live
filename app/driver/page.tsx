@@ -50,6 +50,16 @@ interface DailyPassDetail {
     validatedAt: string;
 }
 
+interface NormalTicketDetail {
+    id: string;
+    ticketRef: string;
+    passengers: number;
+    fromStop: string;
+    toStop: string;
+    amount: string;
+    validatedAt: string;
+}
+
 interface TripStats {
     summary: {
         totalTickets: number;
@@ -58,6 +68,7 @@ interface TripStats {
         dailyPassValidations: number;
         totalRevenue: string;
     };
+    normalTicketDetails: NormalTicketDetail[];
     dailyPassDetails: DailyPassDetail[];
 }
 
@@ -72,6 +83,8 @@ export default function DriverDashboard() {
     const [expandedTripId, setExpandedTripId] = useState<string | null>(null);
     const [tripStats, setTripStats] = useState<{ [key: string]: TripStats }>({});
     const [loadingStats, setLoadingStats] = useState<string | null>(null);
+    const [expandedCardType, setExpandedCardType] = useState<{ [tripId: string]: 'normal' | 'dailyPass' | null }>({});
+    const [showAllTickets, setShowAllTickets] = useState<{ [tripId: string]: boolean }>({});
 
     useEffect(() => {
         loadDashboardData();
@@ -436,22 +449,49 @@ export default function DriverDashboard() {
                                                                         </div>
                                                                     ) : tripStats[trip.id] ? (
                                                                         <div className="space-y-4">
-                                                                            {/* Stats Summary */}
+                                                                            {/* Stats Summary - Clickable Cards */}
                                                                             <div className="grid grid-cols-3 gap-2">
-                                                                                <div className="bg-brand-blue/10 rounded-xl p-3 text-center">
+                                                                                {/* Normal Tickets Card */}
+                                                                                <div
+                                                                                    className={`bg-brand-blue/10 rounded-xl p-3 text-center cursor-pointer transition-all ${expandedCardType[trip.id] === 'normal'
+                                                                                            ? 'ring-2 ring-brand-blue shadow-md'
+                                                                                            : 'hover:bg-brand-blue/20'
+                                                                                        }`}
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        setExpandedCardType(prev => ({
+                                                                                            ...prev,
+                                                                                            [trip.id]: prev[trip.id] === 'normal' ? null : 'normal'
+                                                                                        }));
+                                                                                    }}
+                                                                                >
                                                                                     <Ticket className="w-5 h-5 text-brand-blue mx-auto mb-1" />
                                                                                     <p className="text-2xl font-bold text-brand-slate">
                                                                                         {tripStats[trip.id].summary.normalTickets}
                                                                                     </p>
                                                                                     <p className="text-[10px] text-brand-grey">Normal</p>
                                                                                 </div>
-                                                                                <div className="bg-purple-100 rounded-xl p-3 text-center">
+                                                                                {/* Daily Pass Card */}
+                                                                                <div
+                                                                                    className={`bg-purple-100 rounded-xl p-3 text-center cursor-pointer transition-all ${expandedCardType[trip.id] === 'dailyPass'
+                                                                                            ? 'ring-2 ring-purple-500 shadow-md'
+                                                                                            : 'hover:bg-purple-200'
+                                                                                        }`}
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        setExpandedCardType(prev => ({
+                                                                                            ...prev,
+                                                                                            [trip.id]: prev[trip.id] === 'dailyPass' ? null : 'dailyPass'
+                                                                                        }));
+                                                                                    }}
+                                                                                >
                                                                                     <CreditCard className="w-5 h-5 text-purple-600 mx-auto mb-1" />
                                                                                     <p className="text-2xl font-bold text-brand-slate">
                                                                                         {tripStats[trip.id].summary.dailyPassValidations}
                                                                                     </p>
                                                                                     <p className="text-[10px] text-brand-grey">Daily Pass</p>
                                                                                 </div>
+                                                                                {/* Total Card */}
                                                                                 <div className="bg-brand-green/10 rounded-xl p-3 text-center">
                                                                                     <Users className="w-5 h-5 text-brand-green mx-auto mb-1" />
                                                                                     <p className="text-2xl font-bold text-brand-slate">
@@ -461,31 +501,119 @@ export default function DriverDashboard() {
                                                                                 </div>
                                                                             </div>
 
-                                                                            {/* Daily Pass Details */}
-                                                                            {tripStats[trip.id].dailyPassDetails.length > 0 && (
-                                                                                <div>
-                                                                                    <h4 className="text-sm font-bold text-brand-slate mb-2 flex items-center gap-2">
-                                                                                        <CreditCard className="w-4 h-4 text-purple-600" />
-                                                                                        Daily Pass Validations
-                                                                                    </h4>
-                                                                                    <div className="space-y-2">
-                                                                                        {tripStats[trip.id].dailyPassDetails.map((pass) => (
-                                                                                            <div key={pass.id} className="bg-purple-50 rounded-lg p-3 border border-purple-100">
-                                                                                                <div className="flex justify-between items-start">
-                                                                                                    <div>
-                                                                                                        <p className="font-semibold text-brand-slate">{pass.customerName}</p>
-                                                                                                        <p className="text-xs text-brand-grey">ID: {pass.passNumber}</p>
+                                                                            {/* Normal Tickets Expanded Section */}
+                                                                            <AnimatePresence>
+                                                                                {expandedCardType[trip.id] === 'normal' && (
+                                                                                    <motion.div
+                                                                                        initial={{ height: 0, opacity: 0 }}
+                                                                                        animate={{ height: 'auto', opacity: 1 }}
+                                                                                        exit={{ height: 0, opacity: 0 }}
+                                                                                        transition={{ duration: 0.2 }}
+                                                                                        className="overflow-hidden"
+                                                                                    >
+                                                                                        <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
+                                                                                            <h4 className="text-sm font-bold text-brand-slate mb-3 flex items-center gap-2">
+                                                                                                <Ticket className="w-4 h-4 text-brand-blue" />
+                                                                                                Normal Tickets Validated
+                                                                                            </h4>
+                                                                                            {tripStats[trip.id].normalTicketDetails?.length > 0 ? (
+                                                                                                <>
+                                                                                                    <div className="space-y-2">
+                                                                                                        {(showAllTickets[trip.id]
+                                                                                                            ? tripStats[trip.id].normalTicketDetails
+                                                                                                            : tripStats[trip.id].normalTicketDetails.slice(0, 3)
+                                                                                                        ).map((ticket) => (
+                                                                                                            <div key={ticket.id} className="bg-white rounded-lg p-3 border border-blue-100 shadow-sm">
+                                                                                                                <div className="flex justify-between items-start">
+                                                                                                                    <div>
+                                                                                                                        <p className="font-mono font-bold text-brand-blue text-sm">
+                                                                                                                            {ticket.ticketRef}
+                                                                                                                        </p>
+                                                                                                                        <p className="text-xs text-brand-grey mt-1">
+                                                                                                                            {ticket.fromStop} → {ticket.toStop}
+                                                                                                                        </p>
+                                                                                                                    </div>
+                                                                                                                    <div className="text-right">
+                                                                                                                        <p className="text-sm font-bold text-brand-green">
+                                                                                                                            ₹{ticket.amount}
+                                                                                                                        </p>
+                                                                                                                        <p className="text-[10px] text-brand-grey">
+                                                                                                                            {ticket.passengers} pax
+                                                                                                                        </p>
+                                                                                                                    </div>
+                                                                                                                </div>
+                                                                                                            </div>
+                                                                                                        ))}
                                                                                                     </div>
-                                                                                                    <div className="text-right">
-                                                                                                        <p className="text-xs text-purple-600 font-medium">Valid till</p>
-                                                                                                        <p className="text-sm font-bold text-purple-700">{formatDate(pass.validUntil)}</p>
-                                                                                                    </div>
+                                                                                                    {tripStats[trip.id].normalTicketDetails.length > 3 && (
+                                                                                                        <button
+                                                                                                            onClick={(e) => {
+                                                                                                                e.stopPropagation();
+                                                                                                                setShowAllTickets(prev => ({
+                                                                                                                    ...prev,
+                                                                                                                    [trip.id]: !prev[trip.id]
+                                                                                                                }));
+                                                                                                            }}
+                                                                                                            className="w-full mt-3 py-2 text-sm font-medium text-brand-blue bg-white rounded-lg border border-brand-blue/30 hover:bg-brand-blue/5 transition-colors"
+                                                                                                        >
+                                                                                                            {showAllTickets[trip.id]
+                                                                                                                ? 'Show Less'
+                                                                                                                : `View All ${tripStats[trip.id].normalTicketDetails.length} Tickets`
+                                                                                                            }
+                                                                                                        </button>
+                                                                                                    )}
+                                                                                                </>
+                                                                                            ) : (
+                                                                                                <p className="text-brand-grey text-sm text-center py-2">
+                                                                                                    No normal tickets validated
+                                                                                                </p>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </motion.div>
+                                                                                )}
+                                                                            </AnimatePresence>
+
+                                                                            {/* Daily Pass Expanded Section */}
+                                                                            <AnimatePresence>
+                                                                                {expandedCardType[trip.id] === 'dailyPass' && (
+                                                                                    <motion.div
+                                                                                        initial={{ height: 0, opacity: 0 }}
+                                                                                        animate={{ height: 'auto', opacity: 1 }}
+                                                                                        exit={{ height: 0, opacity: 0 }}
+                                                                                        transition={{ duration: 0.2 }}
+                                                                                        className="overflow-hidden"
+                                                                                    >
+                                                                                        <div className="bg-purple-50 rounded-xl p-3 border border-purple-100">
+                                                                                            <h4 className="text-sm font-bold text-brand-slate mb-3 flex items-center gap-2">
+                                                                                                <CreditCard className="w-4 h-4 text-purple-600" />
+                                                                                                Daily Pass Validations
+                                                                                            </h4>
+                                                                                            {tripStats[trip.id].dailyPassDetails?.length > 0 ? (
+                                                                                                <div className="space-y-2">
+                                                                                                    {tripStats[trip.id].dailyPassDetails.map((pass) => (
+                                                                                                        <div key={pass.id} className="bg-white rounded-lg p-3 border border-purple-100 shadow-sm">
+                                                                                                            <div className="flex justify-between items-start">
+                                                                                                                <div>
+                                                                                                                    <p className="font-semibold text-brand-slate">{pass.customerName}</p>
+                                                                                                                    <p className="text-xs text-brand-grey">Pass: {pass.passNumber}</p>
+                                                                                                                </div>
+                                                                                                                <div className="text-right">
+                                                                                                                    <p className="text-xs text-purple-600 font-medium">Valid till</p>
+                                                                                                                    <p className="text-sm font-bold text-purple-700">{formatDate(pass.validUntil)}</p>
+                                                                                                                </div>
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                    ))}
                                                                                                 </div>
-                                                                                            </div>
-                                                                                        ))}
-                                                                                    </div>
-                                                                                </div>
-                                                                            )}
+                                                                                            ) : (
+                                                                                                <p className="text-brand-grey text-sm text-center py-2">
+                                                                                                    No daily passes validated
+                                                                                                </p>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </motion.div>
+                                                                                )}
+                                                                            </AnimatePresence>
 
                                                                             {tripStats[trip.id].summary.totalTickets === 0 && (
                                                                                 <div className="text-center py-4 bg-gray-50 rounded-xl">

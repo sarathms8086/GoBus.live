@@ -99,6 +99,7 @@ export async function GET(request: NextRequest) {
             },
             normalTicketDetails: normalTickets.map(t => ({
                 id: t.id,
+                ticketRef: t.qr_code,
                 passengers: t.passengers,
                 fromStop: t.from_stop,
                 toStop: t.to_stop,
